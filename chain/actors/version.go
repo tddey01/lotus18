@@ -16,7 +16,7 @@ const ({{range .actorVersions}}
 
 var LatestVersion = 9
 
-var Versions = []int{0, 2, 3, 4, 5, 6, 7, 8, 9}
+var Versions = []int{  0,  2,  3,  4,  5,  6,  7,  8,  9,  }
 
 const (
 	Version0 Version = 0

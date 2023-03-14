@@ -131,7 +131,8 @@ func (tm *TestMiner) StartPledge(ctx context.Context, n, existing int, blockNoti
 			tm.t.Log("WAIT")
 		}
 		tm.t.Logf("PLEDGING %d", i)
-		_, err := tm.StorageMiner.PledgeSector(ctx)
+		//yungojs
+		_, err := tm.StorageMiner.PledgeSector(ctx, 0)
 		require.NoError(tm.t, err)
 	}
 

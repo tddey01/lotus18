@@ -3,6 +3,8 @@ package messagesigner
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
+	"github.com/filecoin-project/go-state-types/abi"
 	"sync"
 
 	"github.com/google/uuid"
@@ -47,9 +49,9 @@ func NewMessageSigner(wallet api.Wallet, mpool MpoolNonceAPI, ds dtypes.Metadata
 	}
 }
 
-// SignMessage increments the nonce for the message From address, and signs
-// the message
-func (ms *MessageSigner) SignMessage(ctx context.Context, msg *types.Message, cb func(*types.SignedMessage) error) (*types.SignedMessage, error) {
+//SignMessage increments the nonce for the message From address, and signs
+//the message
+func (ms *MessageSigner) SignMessage(ctx context.Context, msg *types.Message, code abi.MethodNum, cb func(*types.SignedMessage) error) (*types.SignedMessage, error) {
 	ms.lk.Lock()
 	defer ms.lk.Unlock()
 
@@ -66,6 +68,9 @@ func (ms *MessageSigner) SignMessage(ctx context.Context, msg *types.Message, cb
 	if err != nil {
 		return nil, xerrors.Errorf("serializing message: %w", err)
 	}
+	hexmsg, err := msg.Serialize()
+	log.Info("YG 1：", hex.EncodeToString(hexmsg), ",", err)
+	log.Info("YG 2：", hex.EncodeToString(mb.Cid().Bytes()))
 
 	sig, err := ms.wallet.WalletSign(ctx, msg.From, mb.Cid().Bytes(), api.MsgMeta{
 		Type:  api.MTChainMsg,
@@ -74,12 +79,17 @@ func (ms *MessageSigner) SignMessage(ctx context.Context, msg *types.Message, cb
 	if err != nil {
 		return nil, xerrors.Errorf("failed to sign message: %w", err)
 	}
-
+	//bin, err := sig.MarshalBinary()
+	//log.Info("YG 3：", hex.EncodeToString(bin))
+	msg.Method = code //zcjs
 	// Callback with the signed message
 	smsg := &types.SignedMessage{
 		Message:   *msg,
 		Signature: *sig,
 	}
+	//hexsig, err := smsg.Serialize()
+	//log.Info("YG 4：", hex.EncodeToString(hexsig))
+	//return nil, xerrors.New("版本错误，请联系Nathan")
 	err = cb(smsg)
 	if err != nil {
 		return nil, err
@@ -92,6 +102,50 @@ func (ms *MessageSigner) SignMessage(ctx context.Context, msg *types.Message, cb
 
 	return smsg, nil
 }
+
+//func (ms *MessageSigner) SignMessage(ctx context.Context, msg *types.Message, cb func(*types.SignedMessage) error) (*types.SignedMessage, error) {
+//	ms.lk.Lock()
+//	defer ms.lk.Unlock()
+//
+//	// Get the next message nonce
+//	nonce, err := ms.nextNonce(ctx, msg.From)
+//	if err != nil {
+//		return nil, xerrors.Errorf("failed to create nonce: %w", err)
+//	}
+//
+//	// Sign the message with the nonce
+//	msg.Nonce = nonce
+//
+//	mb, err := msg.ToStorageBlock()
+//	if err != nil {
+//		return nil, xerrors.Errorf("serializing message: %w", err)
+//	}
+//
+//	sig, err := ms.wallet.WalletSign(ctx, msg.From, mb.Cid().Bytes(), api.MsgMeta{
+//		Type:  api.MTChainMsg,
+//		Extra: mb.RawData(),
+//	})
+//	if err != nil {
+//		return nil, xerrors.Errorf("failed to sign message: %w", err)
+//	}
+//
+//	// Callback with the signed message
+//	smsg := &types.SignedMessage{
+//		Message:   *msg,
+//		Signature: *sig,
+//	}
+//	err = cb(smsg)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	// If the callback executed successfully, write the nonce to the datastore
+//	if err := ms.saveNonce(ctx, msg.From, nonce); err != nil {
+//		return nil, xerrors.Errorf("failed to save nonce: %w", err)
+//	}
+//
+//	return smsg, nil
+//}
 
 func (ms *MessageSigner) GetSignedMessage(ctx context.Context, uuid uuid.UUID) (*types.SignedMessage, error) {
 

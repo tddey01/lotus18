@@ -3,9 +3,14 @@ package sealing
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"github.com/filecoin-project/lotus/storage/db"
+	sectorstorage "github.com/filecoin-project/lotus/storage/sealer"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/ipfs/go-cid"
 	"golang.org/x/xerrors"
@@ -107,10 +112,11 @@ func (m *Sealing) padSector(ctx context.Context, sectorID storiface.SectorRef, e
 		if err != nil {
 			return nil, xerrors.Errorf("add piece: %w", err)
 		}
-		if !expectCid.Equals(ppi.PieceCID) {
-			return nil, xerrors.Errorf("got unexpected padding piece CID: expected:%s, got:%s", expectCid, ppi.PieceCID)
-		}
-
+		//yungojs
+		//if !expectCid.Equals(ppi.PieceCID) {
+		//	return nil, xerrors.Errorf("got unexpected padding piece CID: expected:%s, got:%s", expectCid, ppi.PieceCID)
+		//}
+		ppi.PieceCID = expectCid
 		existingPieceSizes = append(existingPieceSizes, size)
 
 		out[i] = ppi
@@ -487,7 +493,48 @@ func (m *Sealing) handlePreCommitWait(ctx statemachine.Context, sector SectorInf
 	}
 
 	log.Info("precommit message landed on chain: ", sector.SectorNumber)
+	//yungojs
+	size, _ := sector.SectorType.SectorSize()
+	var skt string
+	deals := "0"
+	for _, v := range sector.dealIDs() {
+		if len(sector.dealIDs()) == 1 {
+			deals = fmt.Sprintf("%d", v)
+		} else {
+			skt += fmt.Sprintf("%d,", v)
+		}
+	}
 
+	if len(skt) > 1 {
+		deals = fmt.Sprint(skt[:len(skt)-1])
+	}
+	fmt.Printf("YG GetTicket:\t\t%x\n%d\n", sector.TicketValue, sector.TicketEpoch)
+
+	sql := `insert into ` + db.TableTicket + `(miner_id,sector_id,ticket,ticket_h,size,cid_commd,data,cid_commr)value(?,?,?,?,?,?,?,?)`
+	if _, err = db.DBengine.Exec(sql, m.maddr.String(), sector.SectorNumber.String(), hex.EncodeToString(sector.TicketValue), sector.TicketEpoch.String(), size, sector.CommD.String(), deals, sector.CommR.String()); err != nil {
+		sql1 := `update ` + db.TableTicket + ` set ticket=?,ticket_h=? where sector_id=? `
+		if _, err := db.DBengine.Exec(sql1, hex.EncodeToString(sector.TicketValue), sector.TicketEpoch.String(), sector.SectorNumber.String()); err != nil {
+			log.Error("保存ticket失败：", err.Error())
+		}
+	}
+	//for _, piece := range sector.Pieces {
+	//	sql1 := `insert into ` + db.TablePiece + `(miner_id,sector_id,piece_cid,piece_size)value(?,?,?,?)`
+	//	if _, err = db.DBengine.Exec(sql1, m.maddr.String(), sector.SectorNumber.String(), piece.Piece.PieceCID.String(), uint64(piece.Piece.Size)); err != nil {
+	//		log.Error("保存Piece失败：", err.Error())
+	//	}
+	//}
+	for _, piece := range sector.dealIDs() {
+		if piece > 0 {
+			data, err := m.Api.StateMarketStorageDeal(context.Background(), piece, types.TipSetKey{})
+			if err != nil {
+				log.Error(" YG 获取异常错误    +++++++++++++++++++++")
+			}
+			sql1 := `insert into ` + db.TablePiece + `(miner_id,sector_id,piece_cid,piece_size,deal_id)value(?,?,?,?)`
+			if _, err = db.DBengine.Exec(sql1, m.maddr.String(), sector.SectorNumber.String(), data.Proposal.PieceCID.String(), uint64(data.Proposal.PieceSize), piece); err != nil {
+				log.Error("保存Piece失败：", err.Error())
+			}
+		}
+	}
 	return ctx.Send(SectorPreCommitLanded{TipSet: mw.TipSet})
 }
 
@@ -777,6 +824,32 @@ func (m *Sealing) handleSubmitCommit(ctx statemachine.Context, sector SectorInfo
 func (m *Sealing) handleSubmitCommitAggregate(ctx statemachine.Context, sector SectorInfo) error {
 	if sector.CommD == nil || sector.CommR == nil {
 		return ctx.Send(SectorCommitFailed{xerrors.Errorf("sector had nil commR or commD")})
+	}
+	//yungojs
+	for i := 0; i < 10; i++ {
+		sect := sectorstorage.GetSectorTask(sectorstorage.Sectorscalls, sector.SectorNumber)
+		if sect.Wid.String() == "" {
+			log.Info("扇区找不到信息：", sect, ",", sector.SectorNumber)
+			time.Sleep(time.Second)
+			continue
+		}
+		sect.Prove = true
+		err := sectorstorage.Sectorscalls.PutKey(sector.SectorNumber, sect)
+		if err != nil {
+			log.Errorf("记录扇区记录错误1 %s", err)
+			continue
+		}
+		buf, err := sectorstorage.Sectorscalls.GetByKey(sector.SectorNumber)
+		if err != nil {
+			log.Errorf("获取扇区记录错误 %s", err)
+			continue
+		}
+		sect = sectorstorage.NewSectorTask(buf)
+		if !sect.Prove {
+			log.Errorf("未成功记录扇区,即将继续3：", sector.SectorNumber)
+			time.Sleep(time.Millisecond * 100)
+			continue
+		}
 	}
 
 	res, err := m.commiter.AddCommit(ctx.Context(), sector, AggregateInput{

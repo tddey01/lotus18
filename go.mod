@@ -19,6 +19,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.3.2
 	github.com/detailyang/go-fallocate v0.0.0-20180908115635-432fa640bd2e
 	github.com/dgraph-io/badger/v2 v2.2007.3
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/docker/go-units v0.4.0
 	github.com/drand/drand v1.3.0
 	github.com/drand/kyber v1.1.7
@@ -60,6 +61,8 @@ require (
 	github.com/gbrlsnchs/jwt/v3 v3.0.1
 	github.com/gdamore/tcell/v2 v2.2.0
 	github.com/go-kit/kit v0.12.0
+	github.com/go-sql-driver/mysql v1.5.0
+	github.com/go-xorm/xorm v0.7.9
 	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.7.4
@@ -332,6 +335,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v0.0.0-20181124034731-591f970eefbb // indirect
 	lukechampine.com/blake3 v1.1.7 // indirect
+	xorm.io/builder v0.3.6 // indirect
+	xorm.io/core v0.7.2-0.20190928055935-90aeac8d08eb // indirect
 )
 
 replace github.com/filecoin-project/filecoin-ffi => ./extern/filecoin-ffi

@@ -1,6 +1,8 @@
 package sealing
 
 import (
+	record "github.com/filecoin-project/lotus/extern/record-task"
+	"strings"
 	"time"
 
 	"github.com/ipfs/go-cid"
@@ -53,6 +55,13 @@ type SectorForceState struct {
 }
 
 func (evt SectorForceState) applyGlobal(state *SectorInfo) bool {
+	//yungojs
+	if strings.Contains(string(evt.State), "SubmitCommit") {
+		log.Info("修改状态：", state.SectorNumber, ",", evt.State)
+		record.RemoveRL.Lock()
+		record.RemoveSectors[state.SectorNumber] = struct{}{}
+		record.RemoveRL.Unlock()
+	}
 	state.State = evt.State
 	return true
 }
@@ -266,7 +275,10 @@ type SectorProofReady struct {
 }
 
 func (evt SectorProofReady) apply(state *SectorInfo) {
-	state.Proof = evt.Proof
+	//yungojs
+	if len(evt.Proof) > 0 {
+		state.Proof = evt.Proof
+	}
 }
 
 type SectorSubmitCommitAggregate struct{}

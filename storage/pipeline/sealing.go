@@ -34,6 +34,9 @@ import (
 	"github.com/filecoin-project/lotus/storage/pipeline/sealiface"
 	"github.com/filecoin-project/lotus/storage/sealer"
 	"github.com/filecoin-project/lotus/storage/sealer/storiface"
+
+	//yungojs
+	"github.com/filecoin-project/go-statestore"
 )
 
 const SectorStorePrefix = "/sectors"
@@ -130,6 +133,9 @@ type Sealing struct {
 	legacySc *storedcounter.StoredCounter
 
 	getConfig dtypes.GetSealingConfigFunc
+
+	//yungojs
+	sectorscalls *statestore.StateStore
 }
 
 type openSector struct {
@@ -190,7 +196,8 @@ type pendingPiece struct {
 	accepted func(abi.SectorNumber, abi.UnpaddedPieceSize, error)
 }
 
-func New(mctx context.Context, api SealingAPI, fc config.MinerFeeConfig, events Events, maddr address.Address, ds datastore.Batching, sealer sealer.SectorManager, verif storiface.Verifier, prov storiface.Prover, pcp PreCommitPolicy, gc dtypes.GetSealingConfigFunc, journal journal.Journal, addrSel AddressSelector) *Sealing {
+//yungojs
+func New(mctx context.Context, api SealingAPI, fc config.MinerFeeConfig, events Events, maddr address.Address, ds datastore.Batching, sealer sealer.SectorManager, verif storiface.Verifier, prov storiface.Prover, pcp PreCommitPolicy, gc dtypes.GetSealingConfigFunc, journal journal.Journal, addrSel AddressSelector, tcalls *statestore.StateStore) *Sealing {
 	s := &Sealing{
 		Api:      api,
 		DealInfo: &CurrentDealInfoManager{api},
@@ -229,6 +236,8 @@ func New(mctx context.Context, api SealingAPI, fc config.MinerFeeConfig, events 
 			bySector: map[abi.SectorID]SectorState{},
 			byState:  map[SectorState]int64{},
 		},
+		//yungojs
+		sectorscalls: tcalls,
 	}
 
 	s.notifee = func(before, after SectorInfo) {

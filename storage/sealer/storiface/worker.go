@@ -24,6 +24,9 @@ func (w WorkerID) String() string {
 type WorkerInfo struct {
 	Hostname string
 
+	//yungojs
+	Ip  string
+	Wid uuid.UUID
 	// IgnoreResources indicates whether the worker's available resources should
 	// be used ignored (true) or used (false) for the purposes of scheduling and
 	// task assignment. Only supported on local workers. Used for testing.
@@ -106,6 +109,8 @@ type WorkerJob struct {
 type CallID struct {
 	Sector abi.SectorID
 	ID     uuid.UUID
+
+	TT sealtasks.TaskType //yungojs
 }
 
 func (c CallID) String() string {

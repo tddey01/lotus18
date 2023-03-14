@@ -20,6 +20,8 @@ const (
 	TTCommit1    TaskType = "seal/v0/commit/1"
 	TTCommit2    TaskType = "seal/v0/commit/2"
 
+	TTFetchP2 TaskType = "seal/v0/fetchp2" //yungojs
+
 	TTFinalize TaskType = "seal/v0/finalize"
 
 	TTFetch  TaskType = "seal/v0/fetch"

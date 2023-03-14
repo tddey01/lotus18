@@ -3,10 +3,14 @@ package sealer
 import (
 	"context"
 	"encoding/json"
+	ffi "github.com/filecoin-project/filecoin-ffi"
+	"github.com/filecoin-project/lotus/api"
 	"io"
 	"os"
 	"reflect"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,7 +21,6 @@ import (
 	"github.com/ipfs/go-cid"
 	"golang.org/x/xerrors"
 
-	ffi "github.com/filecoin-project/filecoin-ffi"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/proof"
 	"github.com/filecoin-project/go-statestore"
@@ -54,6 +57,7 @@ type LocalWorker struct {
 	storage    paths.Store
 	localStore *paths.Local
 	sindex     paths.SectorIndex
+	miner      api.StorageMiner //yungojs
 	ret        storiface.WorkerReturn
 	executor   ExecutorFunc
 	noSwap     bool
@@ -77,7 +81,34 @@ type LocalWorker struct {
 	closing     chan struct{}
 }
 
-func newLocalWorker(executor ExecutorFunc, wcfg WorkerConfig, envLookup EnvFunc, store paths.Store, local *paths.Local, sindex paths.SectorIndex, ret storiface.WorkerReturn, cst *statestore.StateStore) *LocalWorker {
+//yungojs
+func newLocalWorker(executor ExecutorFunc, wcfg WorkerConfig, envLookup EnvFunc, store paths.Store, local *paths.Local, sindex paths.SectorIndex, ret storiface.WorkerReturn, cst *statestore.StateStore, widp *statestore.StateStore, nodeApi api.StorageMiner) *LocalWorker {
+	//yungojs
+	var workerid uuid.UUID
+	wkey := WorkerIdKey{"/workerid"}
+
+	ok, err := widp.Has(wkey)
+	if err != nil {
+		log.Fatal("获取workerid失败！has:", err.Error())
+	}
+	if ok {
+		wb, err := widp.GetByKey(wkey)
+		if err != nil {
+			log.Fatal("获取workerid失败！GetByKey:", err.Error())
+		}
+		workerid, err = uuid.FromBytes(wb)
+	} else {
+		workerid = uuid.New()
+		wb, err := workerid.MarshalBinary()
+		if err != nil {
+			log.Fatal("保存workerid失败！MarshalBinary:", err.Error())
+		}
+		if err = widp.PutBytes(wkey, wb); err != nil {
+			log.Fatal("保存workerid失败！PutKey:", err.Error())
+		}
+	}
+	log.Info("2022年11月24日19:51:18 YG workerid：", workerid)
+
 	acceptTasks := map[sealtasks.TaskType]struct{}{}
 	for _, taskType := range wcfg.TaskTypes {
 		acceptTasks[taskType] = struct{}{}
@@ -89,7 +120,7 @@ func newLocalWorker(executor ExecutorFunc, wcfg WorkerConfig, envLookup EnvFunc,
 		sindex:     sindex,
 		ret:        ret,
 		name:       wcfg.Name,
-
+		miner:      nodeApi, //yungojs
 		ct: &workerCallTracker{
 			st: cst,
 		},
@@ -99,7 +130,7 @@ func newLocalWorker(executor ExecutorFunc, wcfg WorkerConfig, envLookup EnvFunc,
 		envLookup:            envLookup,
 		ignoreResources:      wcfg.IgnoreResourceFiltering,
 		challengeReadTimeout: wcfg.ChallengeReadTimeout,
-		session:              uuid.New(),
+		session:              workerid, //yungojs
 		closing:              make(chan struct{}),
 	}
 
@@ -142,8 +173,11 @@ func newLocalWorker(executor ExecutorFunc, wcfg WorkerConfig, envLookup EnvFunc,
 	return w
 }
 
-func NewLocalWorker(wcfg WorkerConfig, store paths.Store, local *paths.Local, sindex paths.SectorIndex, ret storiface.WorkerReturn, cst *statestore.StateStore) *LocalWorker {
-	return newLocalWorker(nil, wcfg, os.LookupEnv, store, local, sindex, ret, cst)
+//yungojs
+var WorkerIp string
+
+func NewLocalWorker(wcfg WorkerConfig, store paths.Store, local *paths.Local, sindex paths.SectorIndex, ret storiface.WorkerReturn, cst *statestore.StateStore, widp *statestore.StateStore, miner api.StorageMiner) *LocalWorker {
+	return newLocalWorker(nil, wcfg, os.LookupEnv, store, local, sindex, ret, cst, widp, miner)
 }
 
 type localWorkerPathProvider struct {
@@ -205,6 +239,20 @@ const (
 	DownloadSector        ReturnType = "DownloadSector"
 	Fetch                 ReturnType = "Fetch"
 )
+
+//yungojs
+var Rt_TT = map[ReturnType]sealtasks.TaskType{
+	AddPiece:        sealtasks.TTAddPiece,
+	SealPreCommit1:  sealtasks.TTPreCommit1,
+	SealPreCommit2:  sealtasks.TTPreCommit2,
+	SealCommit1:     sealtasks.TTCommit1,
+	SealCommit2:     sealtasks.TTCommit2,
+	FinalizeSector:  sealtasks.TTFinalize,
+	ReleaseUnsealed: sealtasks.TTUnseal,
+	MoveStorage:     sealtasks.TTFinalize,
+	UnsealPiece:     sealtasks.TTUnseal,
+	Fetch:           sealtasks.TTFetch,
+}
 
 // in: func(WorkerReturn, context.Context, CallID, err string)
 // in: func(WorkerReturn, context.Context, CallID, ret T, err string)
@@ -317,6 +365,8 @@ func toCallError(err error) *storiface.CallError {
 // doReturn tries to send the result to manager, returns true if successful
 func doReturn(ctx context.Context, rt ReturnType, ci storiface.CallID, ret storiface.WorkerReturn, res interface{}, rerr *storiface.CallError) bool {
 	for {
+		//yungojs
+		ci.TT = Rt_TT[rt]
 		err := returnFunc[rt](ctx, ci, ret, res, rerr)
 		if err == nil {
 			break
@@ -365,6 +415,17 @@ func (l *LocalWorker) AddPiece(ctx context.Context, sector storiface.SectorRef, 
 	}
 
 	return l.asyncCall(ctx, sector, AddPiece, func(ctx context.Context, ci storiface.CallID) (interface{}, error) {
+		//yungojs
+		go func() {
+			for {
+				log.Info("返回扇区记录：", sector.ID.Number, l.session)
+				if err := l.miner.WorkerAddAp(ctx, sector.ID.Number, l.session); err != nil {
+					log.Error("修改任务数失败！", err.Error())
+					continue
+				}
+				break
+			}
+		}()
 		return sb.AddPiece(ctx, sector, epcs, sz, r)
 	})
 }
@@ -398,6 +459,21 @@ func (l *LocalWorker) SealPreCommit1(ctx context.Context, sector storiface.Secto
 		if err != nil {
 			return nil, err
 		}
+		//yungojs
+		go func() {
+			for {
+				if err := l.miner.WorkerAddP1(ctx, sector.ID.Number, l.session); err != nil {
+					log.Error("修改任务数失败！", err.Error())
+					continue
+				}
+				break
+			}
+		}()
+		start := time.Now()
+		defer func() {
+			t := time.Since(start)
+			log.Info("YG P1耗时：", t)
+		}()
 
 		return sb.SealPreCommit1(ctx, sector, ticket, pieces)
 	})
@@ -489,16 +565,32 @@ func (l *LocalWorker) FinalizeSector(ctx context.Context, sector storiface.Secto
 
 	return l.asyncCall(ctx, sector, FinalizeSector, func(ctx context.Context, ci storiface.CallID) (interface{}, error) {
 		if err := sb.FinalizeSector(ctx, sector, keepUnsealed); err != nil {
+			//yungojs
+			if strings.Contains(err.Error(), "path not found") {
+				return nil, nil
+			}
+			si, err1 := l.sindex.StorageFindSector(ctx, sector.ID, storiface.FTSealed, 0, false)
+			if err1 != nil {
+				log.Warn("YG FinalizeSector：", err1)
+			}
+			for _, v := range si {
+				if v.CanStore {
+					log.Info("已存在存储：", v.ID, ",", v.URLs)
+					return nil, nil
+				}
+			}
 			return nil, xerrors.Errorf("finalizing sector: %w", err)
 		}
 
 		if len(keepUnsealed) == 0 {
 			if err := l.storage.Remove(ctx, sector.ID, storiface.FTUnsealed, true, nil); err != nil {
-				return nil, xerrors.Errorf("removing unsealed data: %w", err)
+				//yungojs
+				//return nil, xerrors.Errorf("removing unsealed data: %w", err)
 			}
 		}
 
-		return nil, err
+		//yungojs
+		return nil, nil
 	})
 }
 
@@ -545,6 +637,17 @@ func (l *LocalWorker) Remove(ctx context.Context, sector abi.SectorID) error {
 
 func (l *LocalWorker) MoveStorage(ctx context.Context, sector storiface.SectorRef, types storiface.SectorFileType) (storiface.CallID, error) {
 	return l.asyncCall(ctx, sector, MoveStorage, func(ctx context.Context, ci storiface.CallID) (interface{}, error) {
+		//yungojs
+		si, err1 := l.sindex.StorageFindSector(ctx, sector.ID, storiface.FTSealed, 0, false)
+		if err1 != nil {
+			log.Warn("YG MoveStorage：", err1)
+		}
+		for _, v := range si {
+			if v.CanStore {
+				return nil, nil
+			}
+		}
+
 		if err := l.storage.MoveStorage(ctx, sector, types); err != nil {
 			return nil, xerrors.Errorf("move to storage: %w", err)
 		}
@@ -790,9 +893,27 @@ func (l *LocalWorker) memInfo() (memPhysical, memUsed, memSwap, memSwapUsed uint
 }
 
 func (l *LocalWorker) Info(context.Context) (storiface.WorkerInfo, error) {
-	gpus, err := ffi.GetGPUDevices()
-	if err != nil {
-		log.Errorf("getting gpu devices failed: %+v", err)
+	//yungojs
+	//gpus, err := ffi.GetGPUDevices()
+	//if err != nil {
+	//	log.Errorf("getting gpu devices failed: %+v", err)
+	//}
+	var err error
+	var gpus []string
+	count := 1
+	if os.Getenv("C2_MANAGE") == "true" {
+		count, _ = strconv.Atoi(os.Getenv("GPU_COUNT"))
+		if count == 0 {
+			count = 100
+		}
+		for i := 0; i < count; i++ {
+			gpus = append(gpus, strconv.Itoa(i))
+		}
+	} else {
+		gpus, err = ffi.GetGPUDevices()
+		if err != nil {
+			log.Errorf("getting gpu devices failed: %+v", err)
+		}
 	}
 
 	memPhysical, memUsed, memSwap, memSwapUsed, err := l.memInfo()
@@ -806,9 +927,30 @@ func (l *LocalWorker) Info(context.Context) (storiface.WorkerInfo, error) {
 	if err != nil {
 		return storiface.WorkerInfo{}, xerrors.Errorf("interpreting resource env vars: %w", err)
 	}
-
+	//yungojs
+	if os.Getenv("C2_MANAGE") == "true" {
+		return storiface.WorkerInfo{
+			Hostname:        l.name,
+			Ip:              WorkerIp,
+			Wid:             l.session,
+			IgnoreResources: l.ignoreResources,
+			Resources: storiface.WorkerResources{
+				MemPhysical: 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
+				MemUsed:     0,
+				MemSwap:     1024 * 1024 * 1024 * 1024 * 1024 * 1024,
+				MemSwapUsed: 0,
+				CPUs:        1024,
+				GPUs:        gpus,
+				Resources:   resEnv,
+			},
+		}, nil
+	}
 	return storiface.WorkerInfo{
-		Hostname:        l.name,
+		Hostname: l.name,
+		//yungojs
+		Ip:  WorkerIp,
+		Wid: l.session,
+
 		IgnoreResources: l.ignoreResources,
 		Resources: storiface.WorkerResources{
 			MemPhysical: memPhysical,

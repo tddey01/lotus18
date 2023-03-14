@@ -758,8 +758,9 @@ func (m *Sealing) maybeUpgradeSector(ctx context.Context, sp abi.RegisteredSealP
 }
 
 // call with m.inputLk
-func (m *Sealing) createSector(ctx context.Context, cfg sealiface.Config, sp abi.RegisteredSealProof) (abi.SectorNumber, error) {
-	sid, err := m.NextSectorNumber(ctx)
+func (m *Sealing) createSector(ctx context.Context, cfg sealiface.Config, sp abi.RegisteredSealProof, cur uint64) (abi.SectorNumber, error) {
+	//yungojs
+	sid, err := m.NextSectorNumber(ctx, cur)
 	if err != nil {
 		return 0, xerrors.Errorf("getting sector number: %w", err)
 	}
@@ -776,6 +777,7 @@ func (m *Sealing) createSector(ctx context.Context, cfg sealiface.Config, sp abi
 }
 
 func (m *Sealing) tryGetDealSector(ctx context.Context, sp abi.RegisteredSealProof, ef expFn) error {
+	log.Info("YG 2.4.1.6.7.1 ", m.nextDealSector != nil)
 	m.startupWait.Wait()
 
 	if m.nextDealSector != nil {
@@ -788,6 +790,7 @@ func (m *Sealing) tryGetDealSector(ctx context.Context, sp abi.RegisteredSealPro
 	}
 
 	// if we're above WaitDeals limit, we don't want to add more staging sectors
+	log.Info("YG 2.4.1.6.7.2 ", cfg.MaxWaitDealsSectors, ",", m.stats.curStaging(), ",", cfg.MakeNewSectorForDeals)
 	if cfg.MaxWaitDealsSectors > 0 && m.stats.curStaging() >= cfg.MaxWaitDealsSectors {
 		return nil
 	}
@@ -805,7 +808,7 @@ func (m *Sealing) tryGetDealSector(ctx context.Context, sp abi.RegisteredSealPro
 	// - we don't prefer upgrades, but can't create a new sector
 	shouldUpgrade := canUpgrade && (!cfg.PreferNewSectorsForDeals || !canCreate)
 
-	log.Infow("new deal sector decision",
+	log.Infow("YG 2.4.1.6.7.3 new deal sector decision",
 		"sealing", m.stats.curSealing(),
 		"maxSeal", cfg.MaxSealingSectorsForDeals,
 		"maxUpgrade", maxUpgrading,
@@ -825,13 +828,14 @@ func (m *Sealing) tryGetDealSector(ctx context.Context, sp abi.RegisteredSealPro
 	}
 
 	if canCreate {
-		sid, err := m.createSector(ctx, cfg, sp)
+		//yungojs
+		sid, err := m.createSector(ctx, cfg, sp, 0)
 		if err != nil {
 			return err
 		}
 		m.nextDealSector = &sid
 
-		log.Infow("Creating sector", "number", sid, "type", "deal", "proofType", sp)
+		log.Infow("YG 2.4.1.6.7.4 Creating sector", "number", sid, "type", "deal", "proofType", sp)
 		if err := m.sectors.Send(uint64(sid), SectorStart{
 			ID:         sid,
 			SectorType: sp,

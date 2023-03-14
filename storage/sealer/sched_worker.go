@@ -122,7 +122,7 @@ func (sw *schedWorker) handleWorker() {
 			}
 
 			// session looks good
-			{
+			if !worker.Enabled { //yungojs
 				sched.workersLk.Lock()
 				enabled := worker.Enabled
 				worker.Enabled = true

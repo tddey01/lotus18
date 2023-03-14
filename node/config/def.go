@@ -162,7 +162,7 @@ func DefaultStorageMiner() *StorageMiner {
 
 			Assigner: "utilization",
 
-			// By default use the hardware resource filtering strategy.
+			// By default, use the hardware resource filtering strategy.
 			ResourceFiltering: sealer.ResourceFilteringHardware,
 		},
 

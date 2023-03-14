@@ -137,59 +137,59 @@ func (r *Remote) AcquireSector(ctx context.Context, s storiface.SectorRef, exist
 			toFetch |= fileType
 		}
 	}
-
+	//yungojs
 	// get a list of paths to fetch data into. Note: file type filters will apply inside this call.
-	fetchPaths, ids, err := r.local.AcquireSector(ctx, s, storiface.FTNone, toFetch, pathType, op)
-	if err != nil {
-		return storiface.SectorPaths{}, storiface.SectorPaths{}, xerrors.Errorf("allocate local sector for fetching: %w", err)
-	}
-
-	overheadTable := storiface.FSOverheadSeal
-	if pathType == storiface.PathStorage {
-		overheadTable = storiface.FsOverheadFinalized
-	}
-
-	// If any path types weren't found in local storage, try fetching them
-
-	// First reserve storage
-	releaseStorage, err := r.local.Reserve(ctx, s, toFetch, ids, overheadTable)
-	if err != nil {
-		return storiface.SectorPaths{}, storiface.SectorPaths{}, xerrors.Errorf("reserving storage space: %w", err)
-	}
-	defer releaseStorage()
-
-	for _, fileType := range storiface.PathTypes {
-		if fileType&existing == 0 {
-			continue
-		}
-
-		if storiface.PathByType(paths, fileType) != "" {
-			continue
-		}
-
-		dest := storiface.PathByType(fetchPaths, fileType)
-		storageID := storiface.PathByType(ids, fileType)
-
-		url, err := r.acquireFromRemote(ctx, s.ID, fileType, dest)
-		if err != nil {
-			return storiface.SectorPaths{}, storiface.SectorPaths{}, err
-		}
-
-		storiface.SetPathByType(&paths, fileType, dest)
-		storiface.SetPathByType(&stores, fileType, storageID)
-
-		if err := r.index.StorageDeclareSector(ctx, storiface.ID(storageID), s.ID, fileType, op == storiface.AcquireMove); err != nil {
-			log.Warnf("declaring sector %v in %s failed: %+v", s, storageID, err)
-			continue
-		}
-
-		if op == storiface.AcquireMove {
-			id := storiface.ID(storageID)
-			if err := r.deleteFromRemote(ctx, url, []storiface.ID{id}); err != nil {
-				log.Warnf("deleting sector %v from %s (delete %s): %+v", s, storageID, url, err)
-			}
-		}
-	}
+	//fetchPaths, ids, err := r.local.AcquireSector(ctx, s, storiface.FTNone, toFetch, pathType, op)
+	//if err != nil {
+	//	return storiface.SectorPaths{}, storiface.SectorPaths{}, xerrors.Errorf("allocate local sector for fetching: %w", err)
+	//}
+	//
+	//overheadTable := storiface.FSOverheadSeal
+	//if pathType == storiface.PathStorage {
+	//	overheadTable = storiface.FsOverheadFinalized
+	//}
+	//
+	//// If any path types weren't found in local storage, try fetching them
+	//
+	//// First reserve storage
+	//releaseStorage, err := r.local.Reserve(ctx, s, toFetch, ids, overheadTable)
+	//if err != nil {
+	//	return storiface.SectorPaths{}, storiface.SectorPaths{}, xerrors.Errorf("reserving storage space: %w", err)
+	//}
+	//defer releaseStorage()
+	//
+	//for _, fileType := range storiface.PathTypes {
+	//	if fileType&existing == 0 {
+	//		continue
+	//	}
+	//
+	//	if storiface.PathByType(paths, fileType) != "" {
+	//		continue
+	//	}
+	//
+	//	dest := storiface.PathByType(fetchPaths, fileType)
+	//	storageID := storiface.PathByType(ids, fileType)
+	//
+	//	url, err := r.acquireFromRemote(ctx, s.ID, fileType, dest)
+	//	if err != nil {
+	//		return storiface.SectorPaths{}, storiface.SectorPaths{}, err
+	//	}
+	//
+	//	storiface.SetPathByType(&paths, fileType, dest)
+	//	storiface.SetPathByType(&stores, fileType, storageID)
+	//
+	//	if err := r.index.StorageDeclareSector(ctx, storiface.ID(storageID), s.ID, fileType, op == storiface.AcquireMove); err != nil {
+	//		log.Warnf("declaring sector %v in %s failed: %+v", s, storageID, err)
+	//		continue
+	//	}
+	//
+	//	if op == storiface.AcquireMove {
+	//		id := storiface.ID(storageID)
+	//		if err := r.deleteFromRemote(ctx, url, []storiface.ID{id}); err != nil {
+	//			log.Warnf("deleting sector %v from %s (delete %s): %+v", s, storageID, url, err)
+	//		}
+	//	}
+	//}
 
 	return paths, stores, nil
 }
@@ -300,10 +300,11 @@ func (r *Remote) checkAllocated(ctx context.Context, url string, spt abi.Registe
 
 func (r *Remote) MoveStorage(ctx context.Context, s storiface.SectorRef, types storiface.SectorFileType) error {
 	// Make sure we have the data local
-	_, _, err := r.AcquireSector(ctx, s, types, storiface.FTNone, storiface.PathStorage, storiface.AcquireMove)
-	if err != nil {
-		return xerrors.Errorf("acquire src storage (remote): %w", err)
-	}
+	//yungojs
+	//_, _, err := r.AcquireSector(ctx, s, types, storiface.FTNone, storiface.PathStorage, storiface.AcquireMove)
+	//if err != nil {
+	//	return xerrors.Errorf("acquire src storage (remote): %w", err)
+	//}
 
 	return r.local.MoveStorage(ctx, s, types)
 }

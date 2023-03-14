@@ -158,6 +158,10 @@ var DaemonCmd = &cli.Command{
 		},
 	},
 	Action: func(cctx *cli.Context) error {
+		//zcjs
+		//if err := authenticator.AuthToken(); err != nil {
+		//	return err
+		//}
 		isLite := cctx.Bool("lite")
 
 		err := runmetrics.Enable(runmetrics.RunMetricOptions{
@@ -207,7 +211,7 @@ var DaemonCmd = &cli.Command{
 		); err != nil {
 			log.Fatalf("Cannot register the view: %v", err)
 		}
-		// Set the metric to one so it is published to the exporter
+		// Set the metric to one, so it is published to the exporter
 		stats.Record(ctx, metrics.LotusInfo.M(1))
 
 		{

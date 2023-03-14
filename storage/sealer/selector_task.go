@@ -24,8 +24,12 @@ func (s *taskSelector) Ok(ctx context.Context, task sealtasks.TaskType, spt abi.
 	if err != nil {
 		return false, false, xerrors.Errorf("getting supported worker task types: %w", err)
 	}
+	//yungojs
+	if task == sealtasks.TTFetchP2 {
+		_, ok := tasks[sealtasks.TTPreCommit2]
+		return ok, ok, err
+	}
 	_, supported := tasks[task]
-
 	return supported, false, nil
 }
 

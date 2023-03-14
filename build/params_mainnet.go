@@ -118,6 +118,11 @@ func init() {
 	Devnet = false
 
 	BuildType = BuildMainnet
+	//yungojs
+	s, _ := strconv.Atoi(os.Getenv("PDS"))
+	if s > 0 && s < 30 {
+		PropagationDelaySecs = uint64(s)
+	}
 }
 
 const BlockDelaySecs = uint64(builtin2.EpochDurationSeconds)

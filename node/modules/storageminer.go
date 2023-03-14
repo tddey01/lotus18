@@ -259,17 +259,17 @@ type SealingPipelineParams struct {
 func SealingPipeline(fc config.MinerFeeConfig) func(params SealingPipelineParams) (*sealing.Sealing, error) {
 	return func(params SealingPipelineParams) (*sealing.Sealing, error) {
 		var (
-			ds     = params.MetadataDS
-			mctx   = params.MetricsCtx
-			lc     = params.Lifecycle
-			api    = params.API
-			sealer = params.Sealer
-			verif  = params.Verifier
-			prover = params.Prover
-			gsd    = params.GetSealingConfigFn
-			j      = params.Journal
-			as     = params.AddrSel
-			maddr  = address.Address(params.Maddr)
+			ds      = params.MetadataDS
+			mctx    = params.MetricsCtx
+			lc      = params.Lifecycle
+			api     = params.API
+			sealer1 = params.Sealer
+			verif   = params.Verifier
+			prover  = params.Prover
+			gsd     = params.GetSealingConfigFn
+			j       = params.Journal
+			as      = params.AddrSel
+			maddr   = address.Address(params.Maddr)
 		)
 
 		ctx := helpers.LifecycleCtx(mctx, lc)
@@ -285,8 +285,8 @@ func SealingPipeline(fc config.MinerFeeConfig) func(params SealingPipelineParams
 		}
 		provingBuffer := md.WPoStProvingPeriod * 2
 		pcp := sealing.NewBasicPreCommitPolicy(api, gsd, provingBuffer)
-
-		pipeline := sealing.New(ctx, api, fc, evts, maddr, ds, sealer, verif, prover, &pcp, gsd, j, as)
+		//yungojs
+		pipeline := sealing.New(ctx, api, fc, evts, maddr, ds, sealer1, verif, prover, &pcp, gsd, j, as, sealer.Sectorscalls)
 
 		lc.Append(fx.Hook{
 			OnStart: func(context.Context) error {
@@ -323,6 +323,15 @@ func WindowPostScheduler(fc config.MinerFeeConfig, pc config.ProvingConfig) func
 
 		lc.Append(fx.Hook{
 			OnStart: func(context.Context) error {
+				//yungojs
+				if os.Getenv("wdpost") == "false" {
+					log.Info("YG  wdpost已关闭")
+					return nil
+				}
+				if os.Getenv("wdpost") == "true" {
+					log.Info("YG WDPOST 正常开启   ")
+				}
+
 				go fps.Run(ctx)
 				return nil
 			},
@@ -782,6 +791,14 @@ func RetrievalProvider(
 var WorkerCallsPrefix = datastore.NewKey("/worker/calls")
 var ManagerWorkPrefix = datastore.NewKey("/stmgr/calls")
 
+//yungojs
+//var SectorsCallsPrefix = datastore.NewKey("/sectors/calls")		//命名冲突 /sectors
+var SectorsInWorkerPrefix = datastore.NewKey("/yungo_sectors_worker/calls") //miner上存worker保留扇区信息
+var WidPrefix = datastore.NewKey("/yungo_worker/workerid")                  //worker上保存workerID
+//var WFinPrefix = datastore.NewKey("/yungo_worker/wfin")                     //worker上保存转移扇区
+var TaskPrefix = datastore.NewKey("/yungo_task_worker/calls")    //保存worker上任务数
+var IssuePrefix = datastore.NewKey("/yungo_already_issue/calls") //保存已经发布任务数
+
 func LocalStorage(mctx helpers.MetricsCtx, lc fx.Lifecycle, ls paths.LocalStorage, si paths.SectorIndex, urls paths.URLs) (*paths.Local, error) {
 	ctx := helpers.LifecycleCtx(mctx, lc)
 	return paths.NewLocal(ctx, ls, si, urls)
@@ -791,13 +808,23 @@ func RemoteStorage(lstor *paths.Local, si paths.SectorIndex, sa sealer.StorageAu
 	return paths.NewRemote(lstor, si, http.Header(sa), sc.ParallelFetchLimit, &paths.DefaultPartialFileHandler{})
 }
 
-func SectorStorage(mctx helpers.MetricsCtx, lc fx.Lifecycle, lstor *paths.Local, stor paths.Store, ls paths.LocalStorage, si paths.SectorIndex, sc sealer.Config, ds dtypes.MetadataDS) (*sealer.Manager, error) {
+//yungojs
+func SectorStorage(mctx helpers.MetricsCtx, lc fx.Lifecycle, lstor *paths.Local, stor paths.Store, ls paths.LocalStorage, si paths.SectorIndex, sc sealer.Config, ds dtypes.MetadataDS, f repo.LockedRepo) (*sealer.Manager, error) {
 	ctx := helpers.LifecycleCtx(mctx, lc)
 
-	wsts := statestore.New(namespace.Wrap(ds, WorkerCallsPrefix))
+	//yungojs
+	mds, err := f.Datastore(ctx, "/metadata-yungo")
+	if err != nil {
+		return nil, err
+	}
+	//wsts := statestore.New(namespace.Wrap(ds, WorkerCallsPrefix))
+	wsts := statestore.New(namespace.Wrap(mds, SectorsInWorkerPrefix))
+	tcalls := statestore.New(namespace.Wrap(mds, TaskPrefix))
+	acalls := statestore.New(namespace.Wrap(mds, IssuePrefix))
+
 	smsts := statestore.New(namespace.Wrap(ds, ManagerWorkPrefix))
 
-	sst, err := sealer.New(ctx, lstor, stor, ls, si, sc, wsts, smsts)
+	sst, err := sealer.New(ctx, lstor, stor, ls, si, sc, wsts, smsts, tcalls, acalls)
 	if err != nil {
 		return nil, err
 	}
@@ -1009,6 +1036,7 @@ func NewSetSealConfigFunc(r repo.LockedRepo) (dtypes.SetSealingConfigFunc, error
 				AggregateCommits:           cfg.AggregateCommits,
 				MinCommitBatch:             cfg.MinCommitBatch,
 				MaxCommitBatch:             cfg.MaxCommitBatch,
+				MaxWaitCommitBatch:         cfg.MaxWaitCommitBatch, //yungojs
 				CommitBatchWait:            config.Duration(cfg.CommitBatchWait),
 				CommitBatchSlack:           config.Duration(cfg.CommitBatchSlack),
 				AggregateAboveBaseFee:      types.FIL(cfg.AggregateAboveBaseFee),
@@ -1054,6 +1082,7 @@ func ToSealingConfig(dealmakingCfg config.DealmakingConfig, sealingCfg config.Se
 		AggregateCommits:           sealingCfg.AggregateCommits,
 		MinCommitBatch:             sealingCfg.MinCommitBatch,
 		MaxCommitBatch:             sealingCfg.MaxCommitBatch,
+		MaxWaitCommitBatch:         sealingCfg.MaxWaitCommitBatch, //yungojs
 		CommitBatchWait:            time.Duration(sealingCfg.CommitBatchWait),
 		CommitBatchSlack:           time.Duration(sealingCfg.CommitBatchSlack),
 		AggregateAboveBaseFee:      types.BigInt(sealingCfg.AggregateAboveBaseFee),

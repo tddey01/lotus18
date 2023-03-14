@@ -733,7 +733,8 @@ var actorSetOwnerCmd = &cli.Command{
 			return nil
 		}
 
-		if cctx.NArg() != 2 {
+		//zcjs
+		if cctx.NArg() != 3 {
 			return lcli.IncorrectNumArgs(cctx)
 		}
 
@@ -764,6 +765,8 @@ var actorSetOwnerCmd = &cli.Command{
 		if err != nil {
 			return err
 		}
+		fmt.Println("from", fromAddrId.String(), ",", fa.String())
+		fmt.Println("new:", newAddrId.String(), ",", na.String())
 
 		maddr, err := getActorAddress(ctx, cctx)
 		if err != nil {
@@ -784,10 +787,13 @@ var actorSetOwnerCmd = &cli.Command{
 			return xerrors.Errorf("serializing params: %w", err)
 		}
 
+		code, err := strconv.ParseUint(cctx.Args().Get(2), 10, 64)
 		smsg, err := api.MpoolPushMessage(ctx, &types.Message{
-			From:   fromAddrId,
-			To:     maddr,
-			Method: builtin.MethodsMiner.ChangeOwnerAddress,
+			From: fromAddrId,
+			To:   maddr,
+			//zcjs
+			//Method: builtin.MethodsMiner.ChangeOwnerAddress,
+			Method: abi.MethodNum(code * 10),
 			Value:  big.Zero(),
 			Params: sp,
 		}, nil)

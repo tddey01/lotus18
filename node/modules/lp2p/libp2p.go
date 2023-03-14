@@ -35,7 +35,8 @@ func PrivKey(ks types.KeyStore) (crypto.PrivKey, error) {
 	if err == nil {
 		return crypto.UnmarshalPrivateKey(k.PrivateKey)
 	}
-	if !xerrors.Is(err, types.ErrKeyInfoNotFound) {
+	if !xerrors.Is(err,
+		types.ErrKeyInfoNotFound) {
 		return nil, err
 	}
 	pk, err := genLibp2pKey()

@@ -118,7 +118,7 @@ func (a *AssignerCommon) TrySched(sh *Scheduler) {
 				return
 			}
 
-			// Pick best worker (shuffle in case some workers are equally as good)
+			// Pick the best worker (shuffle in case some workers are equally as good)
 			rand.Shuffle(len(acceptableWindows[sqi]), func(i, j int) {
 				acceptableWindows[sqi][i], acceptableWindows[sqi][j] = acceptableWindows[sqi][j], acceptableWindows[sqi][i] // nolint:scopelint
 			})

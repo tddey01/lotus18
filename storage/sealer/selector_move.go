@@ -35,10 +35,14 @@ func (s *moveSelector) Ok(ctx context.Context, task sealtasks.TaskType, spt abi.
 	if err != nil {
 		return false, false, xerrors.Errorf("getting supported worker task types: %w", err)
 	}
+	//yungojs
+	if task == sealtasks.TTFetchP2 {
+		_, ok := tasks[sealtasks.TTPreCommit2]
+		return ok, ok, err
+	}
 	if _, supported := tasks[task]; !supported {
 		return false, false, nil
 	}
-
 	paths, err := whnd.workerRpc.Paths(ctx)
 	if err != nil {
 		return false, false, xerrors.Errorf("getting worker paths: %w", err)

@@ -18,7 +18,7 @@ const (
 	FileTypes = iota
 )
 
-var PathTypes = []SectorFileType{FTUnsealed, FTSealed, FTCache, FTUpdate, FTUpdateCache}
+var PathTypes = []SectorFileType{FTUnsealed, FTCache, FTSealed, FTUpdate, FTUpdateCache} //yungojs
 
 const (
 	FTNone SectorFileType = 0

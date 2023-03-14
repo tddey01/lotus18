@@ -5,15 +5,15 @@ package ffiwrapper
 
 import (
 	"context"
-
-	"go.opencensus.io/trace"
-	"golang.org/x/xerrors"
-
+	"fmt"
 	ffi "github.com/filecoin-project/filecoin-ffi"
 	"github.com/filecoin-project/go-state-types/abi"
-	"github.com/filecoin-project/specs-actors/v7/actors/runtime/proof"
-
 	"github.com/filecoin-project/lotus/storage/sealer/storiface"
+	"github.com/filecoin-project/specs-actors/v7/actors/runtime/proof"
+	"go.opencensus.io/trace"
+	"golang.org/x/xerrors"
+	"os"
+	"path/filepath"
 )
 
 func (sb *Sealer) GenerateWinningPoSt(ctx context.Context, minerID abi.ActorID, sectorInfo []proof.ExtendedSectorInfo, randomness abi.PoStRandomness) ([]proof.PoStProof, error) {
@@ -105,6 +105,37 @@ func (sb *Sealer) pubExtendedSectorToPriv(ctx context.Context, mid abi.ActorID, 
 			cache = paths.Cache
 			sealed = paths.Sealed
 		}
+		//yungojs
+		toCheck := map[string]int64{
+			sealed:                        1,
+			filepath.Join(cache, "p_aux"): 0,
+		}
+		ssize, err := s.SealProof.SectorSize()
+		if err != nil {
+			return ffi.SortedPrivateSectorInfo{}, nil, nil, xerrors.Errorf("acquiring registered PoSt proof from sector info %+v: %w", s, err)
+		}
+		addCachePathsForSectorSize(toCheck, cache, ssize)
+		iserr := false
+		for p, sz := range toCheck {
+			st, err := os.Stat(p)
+			if err != nil {
+				log.Warnw("YG CheckProvable1 Sector FAULT: sector file stat error", "sector", s, "sealed", sealed, "cache", cache, "file", p, "err", err)
+				iserr = true
+				break
+			}
+
+			if sz != 0 {
+				if st.Size() != int64(ssize)*sz {
+					log.Warnf("YG CheckProvable2 Sector FAULT: sector file is wrong size", "sector", s, "sealed", sealed, "cache", cache, "file", p, "size", st.Size(), "expectSize", int64(ssize)*sz)
+					iserr = true
+					break
+				}
+			}
+		}
+		if iserr {
+			skipped = append(skipped, sid.ID)
+			continue
+		}
 
 		postProofType, err := rpt(s.SealProof)
 		if err != nil {
@@ -126,6 +157,28 @@ func (sb *Sealer) pubExtendedSectorToPriv(ctx context.Context, mid abi.ActorID, 
 	}
 
 	return ffi.NewSortedPrivateSectorInfo(out...), skipped, done, nil
+}
+
+//yungojs
+func addCachePathsForSectorSize(chk map[string]int64, cacheDir string, ssize abi.SectorSize) {
+	switch ssize {
+	case 2 << 10:
+		fallthrough
+	case 8 << 20:
+		fallthrough
+	case 512 << 20:
+		chk[filepath.Join(cacheDir, "sc-02-data-tree-r-last.dat")] = 0
+	case 32 << 30:
+		for i := 0; i < 8; i++ {
+			chk[filepath.Join(cacheDir, fmt.Sprintf("sc-02-data-tree-r-last-%d.dat", i))] = 0
+		}
+	case 64 << 30:
+		for i := 0; i < 16; i++ {
+			chk[filepath.Join(cacheDir, fmt.Sprintf("sc-02-data-tree-r-last-%d.dat", i))] = 0
+		}
+	default:
+		log.Warnf("not checking cache files of %s sectors for faults", ssize)
+	}
 }
 
 var _ storiface.Verifier = ProofVerifier

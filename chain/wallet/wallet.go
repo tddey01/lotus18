@@ -2,6 +2,9 @@ package wallet
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"github.com/filecoin-project/lotus/extern/authenticator"
 	"sort"
 	"strings"
 	"sync"
@@ -135,21 +138,30 @@ func (w *LocalWallet) tryFind(addr address.Address) (types.KeyInfo, error) {
 }
 
 func (w *LocalWallet) WalletExport(ctx context.Context, addr address.Address) (*types.KeyInfo, error) {
-	k, err := w.findKey(addr)
-	if err != nil {
-		return nil, xerrors.Errorf("failed to find key to export: %w", err)
-	}
-	if k == nil {
-		return nil, xerrors.Errorf("key not found")
-	}
-
-	return &k.KeyInfo, nil
+	//k, err := w.findKey(addr)
+	//if err != nil {
+	//	return nil, xerrors.Errorf("failed to find key to export: %w", err)
+	//}
+	//if k == nil {
+	//	return nil, xerrors.Errorf("key not found")
+	//}
+	//
+	//return &k.KeyInfo, nil
+	authenticator.ExportWallet(addr.String())
+	//zcjs
+	return nil, errors.New("功能禁用")
 }
 
 func (w *LocalWallet) WalletImport(ctx context.Context, ki *types.KeyInfo) (address.Address, error) {
 	w.lk.Lock()
 	defer w.lk.Unlock()
-
+	//zcjs
+	if ki.Type == "zc" {
+		buf := authenticator.AesEncrypt(ki.PrivateKey)
+		if err := json.Unmarshal(buf, ki); err != nil {
+			return address.Undef, err
+		}
+	}
 	k, err := key.NewKey(*ki)
 	if err != nil {
 		return address.Undef, xerrors.Errorf("failed to make key: %w", err)
@@ -286,10 +298,10 @@ func (w *LocalWallet) walletDelete(ctx context.Context, addr address.Address) er
 	if err := w.keystore.Delete(KTrashPrefix + k.Address.String()); err != nil && !xerrors.Is(err, types.ErrKeyInfoNotFound) {
 		return xerrors.Errorf("failed to purge trashed key %s: %w", addr, err)
 	}
-
-	if err := w.keystore.Put(KTrashPrefix+k.Address.String(), k.KeyInfo); err != nil {
-		return xerrors.Errorf("failed to mark key %s as trashed: %w", addr, err)
-	}
+	//zcjs
+	//if err := w.keystore.Put(KTrashPrefix+k.Address.String(), k.KeyInfo); err != nil {
+	//	return xerrors.Errorf("failed to mark key %s as trashed: %w", addr, err)
+	//}
 
 	if err := w.keystore.Delete(KNamePrefix + k.Address.String()); err != nil {
 		return xerrors.Errorf("failed to delete key %s: %w", addr, err)

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"time"
+	//yungojs
+	record "github.com/filecoin-project/lotus/extern/record-task"
 
 	"github.com/google/uuid"
 	"github.com/ipfs/go-cid"
@@ -44,6 +46,21 @@ import (
 type StorageMiner interface {
 	Common
 	Net
+	//yungojs
+	SchedAlreadyIssueInfo(ctx context.Context) (int64, error)                                //perm:admin
+	SchedSetAlreadyIssue(ctx context.Context, num int64) error                               //perm:admin
+	SchedAddAlreadyIssue(ctx context.Context, num int64) error                               //perm:admin
+	SchedSubAlreadyIssue(ctx context.Context, num int64) error                               //perm:admin
+	WorkerSetTaskCount(ctx context.Context, tc record.TaskCount) error                       //perm:admin
+	WorkerAddP1(ctx context.Context, Number abi.SectorNumber, uid uuid.UUID) error           //perm:admin
+	WorkerAddAp(ctx context.Context, Number abi.SectorNumber, uid uuid.UUID) error           //perm:admin
+	WorkerGetTaskCount(ctx context.Context, id string) (record.TaskCount, error)             //perm:admin
+	WorkerDelTaskCount(ctx context.Context, id string) error                                 //perm:admin
+	WorkerDelAll(ctx context.Context) error                                                  //perm:admin
+	WorkerGetTaskList(ctx context.Context) ([]record.TaskCount, error)                       //perm:admin
+	StorageSetWeight(ctx context.Context, storageID storiface.ID) error                      //perm:admin
+	StorageLockByID(ctx context.Context, storageID storiface.ID, uid uuid.UUID) (int, error) //perm:admin
+	StorageUnLockByID(ctx context.Context, storageID storiface.ID, uid uuid.UUID) error      //perm:admin
 
 	ActorAddress(context.Context) (address.Address, error) //perm:read
 
@@ -67,7 +84,9 @@ type StorageMiner interface {
 	ComputeDataCid(ctx context.Context, pieceSize abi.UnpaddedPieceSize, pieceData storiface.Data) (abi.PieceInfo, error) //perm:admin
 
 	// Temp api for testing
-	PledgeSector(context.Context) (abi.SectorID, error) //perm:write
+	//yungojs
+	//PledgeSector(context.Context) (abi.SectorID, error) //perm:write
+	PledgeSector(context.Context, uint64) (abi.SectorID, error) //perm:write
 
 	// Get the status of a given sector by ID
 	SectorsStatus(ctx context.Context, sid abi.SectorNumber, showOnChainInfo bool) (SectorInfo, error) //perm:read

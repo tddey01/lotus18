@@ -766,7 +766,7 @@ func (n *Ensemble) Start() *Ensemble {
 				TaskTypes: m.options.workerTasks,
 				NoSwap:    false,
 				Name:      m.options.workerName,
-			}, store, localStore, m.MinerNode, m.MinerNode, wsts),
+			}, store, localStore, m.MinerNode, m.MinerNode, wsts, nil, nil), //yungojs
 			LocalStore: localStore,
 			Storage:    lr,
 		}

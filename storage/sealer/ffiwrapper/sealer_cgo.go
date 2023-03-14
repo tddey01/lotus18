@@ -189,6 +189,40 @@ func (sb *Sealer) DataCid(ctx context.Context, pieceSize abi.UnpaddedPieceSize, 
 }
 
 func (sb *Sealer) AddPiece(ctx context.Context, sector storiface.SectorRef, existingPieceSizes []abi.UnpaddedPieceSize, pieceSize abi.UnpaddedPieceSize, pieceData storiface.Data) (abi.PieceInfo, error) {
+	//yungojs
+	ss, err := sector.ProofType.SectorSize()
+	if err != nil {
+		return abi.PieceInfo{}, err
+	}
+	linkpath := ""
+	switch ss {
+	case ss2KiB:
+		linkpath = os.Getenv("MINER2_S2K_PATH")
+		if linkpath != "" {
+			return sb.AddPiece2(ctx, sector, existingPieceSizes, pieceSize, linkpath)
+		}
+	case ss8MiB:
+		linkpath = os.Getenv("MINER8_S8M_PATH")
+		if linkpath != "" {
+			return sb.AddPiece2(ctx, sector, existingPieceSizes, pieceSize, linkpath)
+		}
+	case ss512MiB:
+		linkpath = os.Getenv("MINER512_S512M_PATH")
+		if linkpath != "" {
+			return sb.AddPiece2(ctx, sector, existingPieceSizes, pieceSize, linkpath)
+		}
+	case ss32GiB:
+		linkpath = os.Getenv("MINER32_S32G_PATH")
+		if linkpath != "" {
+			return sb.AddPiece2(ctx, sector, existingPieceSizes, pieceSize, linkpath)
+		}
+	case ss64GiB:
+		linkpath = os.Getenv("MINER64_S64G_PATH")
+		if linkpath != "" {
+			return sb.AddPiece2(ctx, sector, existingPieceSizes, pieceSize, linkpath)
+		}
+	}
+
 	origPieceData := pieceData
 	defer func() {
 		closer, ok := origPieceData.(io.Closer)
@@ -893,9 +927,10 @@ func (sb *Sealer) SealCommit1(ctx context.Context, sector storiface.SectorRef, t
 	return output, nil
 }
 
-func (sb *Sealer) SealCommit2(ctx context.Context, sector storiface.SectorRef, phase1Out storiface.Commit1Out) (storiface.Proof, error) {
-	return ffi.SealCommitPhase2(phase1Out, sector.ID.Number, sector.ID.Miner)
-}
+//yungojs
+//func (sb *Sealer) SealCommit2(ctx context.Context, sector storiface.SectorRef, phase1Out storiface.Commit1Out) (storiface.Proof, error) {
+//	return ffi.SealCommitPhase2(phase1Out, sector.ID.Number, sector.ID.Miner)
+//}
 
 func (sb *Sealer) ReplicaUpdate(ctx context.Context, sector storiface.SectorRef, pieces []abi.PieceInfo) (storiface.ReplicaUpdateOut, error) {
 	empty := storiface.ReplicaUpdateOut{}

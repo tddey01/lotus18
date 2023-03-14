@@ -144,6 +144,11 @@ func (m *Miner) Start(_ context.Context) error {
 		return fmt.Errorf("miner already started")
 	}
 	m.stop = make(chan struct{})
+	//yungojs
+	if os.Getenv("wnpost") == "false" {
+		log.Info("YG  wnpost已关闭")
+		return nil
+	}
 	go m.mine(context.TODO())
 	return nil
 }
@@ -346,6 +351,10 @@ minerLoop:
 			// has enough time to form.
 			//
 			// See:  https://github.com/filecoin-project/lotus/issues/1845
+			//yungojs
+			if build.PropagationDelaySecs != 10 {
+				log.Info("YG ：NullRounds:", base.NullRounds, ",PropagationDelaySecs:", build.PropagationDelaySecs)
+			}
 			nextRound := time.Unix(int64(base.TipSet.MinTimestamp()+build.BlockDelaySecs*uint64(base.NullRounds))+int64(build.PropagationDelaySecs), 0)
 
 			select {

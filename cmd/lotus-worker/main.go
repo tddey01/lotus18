@@ -11,6 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	//yungojs
+	server_c2 "github.com/filecoin-project/lotus/extern/server-c2"
+	"github.com/filecoin-project/lotus/storage/sealer/ffiwrapper"
 
 	"github.com/google/uuid"
 	"github.com/ipfs/go-datastore/namespace"
@@ -285,7 +288,21 @@ var runCmd = &cli.Command{
 	},
 	Action: func(cctx *cli.Context) error {
 		log.Info("Starting lotus worker")
-
+		//yungojs
+		if os.Getenv("C2_MANAGE") == "true" {
+			ips := strings.Split(os.Getenv("C2_URL"), ",")
+			for _, v := range ips {
+				ffiwrapper.URLC2 = append(ffiwrapper.URLC2, &server_c2.C2Server{v, 0})
+			}
+			fmt.Println("ffiwrapper.C2_URL:", ffiwrapper.URLC2)
+			if len(ffiwrapper.URLC2) == 0 {
+				log.Fatal("启动失败：C2_URL为空:", ips)
+			}
+			if os.Getenv("C2_TOKEN") == "" {
+				log.Fatal("启动失败：C2_TOKEN为空")
+			}
+			go ffiwrapper.TrySched()
+		}
 		if !cctx.Bool("enable-gpu-proving") {
 			if err := os.Setenv("BELLMAN_NO_GPU", "true"); err != nil {
 				return xerrors.Errorf("could not set no-gpu env: %+v", err)
@@ -511,13 +528,22 @@ var runCmd = &cli.Command{
 				if err != nil {
 					return err
 				}
-				rip, err := extractRoutableIP(timeout)
+				rip, err := extractRoutableIP(timeout, addressSlice[1]) //yungojs
 				if err != nil {
 					return err
 				}
 				address = rip + ":" + addressSlice[1]
 			}
+			//yungojs
+			sealer.WorkerIp = address
+			log.Info("工人IP", sealer.WorkerIp)
 		}
+		//yungojs
+		dsy, err := lr.Datastore(context.Background(), "/metadata-yungo")
+		if err != nil {
+			return nil
+		}
+		widp := statestore.New(namespace.Wrap(dsy, modules.WidPrefix))
 
 		localStore, err := paths.NewLocal(ctx, lr, nodeApi, []string{"http://" + address + "/remote"})
 		if err != nil {
@@ -555,7 +581,7 @@ var runCmd = &cli.Command{
 				MaxParallelChallengeReads: cctx.Int("post-parallel-reads"),
 				ChallengeReadTimeout:      cctx.Duration("post-read-timeout"),
 				Name:                      cctx.String("name"),
-			}, remote, localStore, nodeApi, nodeApi, wsts),
+			}, remote, localStore, nodeApi, nodeApi, wsts, widp, nodeApi), //yungojs 2个参数
 			LocalStore: localStore,
 			Storage:    lr,
 		}
@@ -569,15 +595,15 @@ var runCmd = &cli.Command{
 				return ctx
 			},
 		}
-
-		go func() {
-			<-ctx.Done()
-			log.Warn("Shutting down...")
-			if err := srv.Shutdown(context.TODO()); err != nil {
-				log.Errorf("shutting down RPC server failed: %s", err)
-			}
-			log.Warn("Graceful shutdown successful")
-		}()
+		//yungojs
+		//go func() {
+		//	<-ctx.Done()
+		//	log.Warn("Shutting down...")
+		//	if err := srv.Shutdown(context.TODO()); err != nil {
+		//		log.Errorf("shutting down RPC server failed: %s", err)
+		//	}
+		//	log.Warn("Graceful shutdown successful")
+		//}()
 
 		nl, err := net.Listen("tcp", address)
 		if err != nil {
@@ -666,18 +692,25 @@ var runCmd = &cli.Command{
 
 					select {
 					case <-readyCh:
+						//yungojs
 						if err := nodeApi.WorkerConnect(ctx, "http://"+address+"/rpc/v0"); err != nil {
 							log.Errorf("Registering worker failed: %+v", err)
-							cancel()
-							return
+							//cancel()
+							//return
 						}
 
 						log.Info("Worker registered successfully, waiting for tasks")
 
 						readyCh = nil
 					case <-heartbeats.C:
-					case <-ctx.Done():
-						return // graceful shutdown
+						//yungojs
+						if err != nil {
+							if err1 := nodeApi.WorkerConnect(context.Background(), "http://"+address+"/rpc/v0"); err1 != nil {
+								log.Errorf("Registering worker failed: %+v", err1)
+							}
+						}
+						//case <-ctx.Done():
+						//	return // graceful shutdown
 					}
 				}
 
@@ -702,7 +735,8 @@ var runCmd = &cli.Command{
 	},
 }
 
-func extractRoutableIP(timeout time.Duration) (string, error) {
+//yungojs
+func extractRoutableIP(timeout time.Duration, port string) (string, error) {
 	minerMultiAddrKey := "MINER_API_INFO"
 	deprecatedMinerMultiAddrKey := "STORAGE_API_INFO"
 	env, ok := os.LookupEnv(minerMultiAddrKey)
@@ -722,6 +756,7 @@ func extractRoutableIP(timeout time.Duration) (string, error) {
 	defer conn.Close() //nolint:errcheck
 
 	localAddr := conn.LocalAddr().(*net.TCPAddr)
-
+	//yungojs
+	sealer.WorkerIp = strings.Split(localAddr.IP.String(), ":")[0] + ":" + port
 	return strings.Split(localAddr.IP.String(), ":")[0], nil
 }

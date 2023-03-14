@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	record "github.com/filecoin-project/lotus/extern/record-task"
 	"net/http"
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -176,8 +178,9 @@ func (sm *StorageMinerAPI) ActorSectorSize(ctx context.Context, addr address.Add
 	return mi.SectorSize, nil
 }
 
-func (sm *StorageMinerAPI) PledgeSector(ctx context.Context) (abi.SectorID, error) {
-	sr, err := sm.Miner.PledgeSector(ctx)
+//yungojs
+func (sm *StorageMinerAPI) PledgeSector(ctx context.Context, cur uint64) (abi.SectorID, error) {
+	sr, err := sm.Miner.PledgeSector(ctx, cur)
 	if err != nil {
 		return abi.SectorID{}, err
 	}
@@ -260,14 +263,25 @@ func (sm *StorageMinerAPI) SectorsList(context.Context) ([]abi.SectorNumber, err
 	if err != nil {
 		return nil, err
 	}
-
-	out := make([]abi.SectorNumber, 0, len(sectors))
+	states := make(map[sealing.SectorState][]abi.SectorNumber)
+	out := make([]abi.SectorNumber, 0, len(sectors)) //yungojs
 	for _, sector := range sectors {
 		if sector.State == sealing.UndefinedSectorState {
 			continue // sector ID not set yet
 		}
+		//yungojs
+		states[sector.State] = append(states[sector.State], sector.SectorNumber)
 
 		out = append(out, sector.SectorNumber)
+	}
+	log.Info("扇区数量：", len(sectors), ",", len(states))
+	//yungojs
+	for k, vals := range states {
+		fmt.Print("扇区数量 ", k, "：")
+		for _, v := range vals {
+			fmt.Print(v, ",")
+		}
+		fmt.Println()
 	}
 	return out, nil
 }
@@ -307,12 +321,59 @@ func (sm *StorageMinerAPI) SectorsSummary(ctx context.Context) (map[api.SectorSt
 	}
 
 	out := make(map[api.SectorState]int)
+	//yungojs
+	show := make(map[api.SectorState]string)
 	for i := range sectors {
 		state := api.SectorState(sectors[i].State)
 		out[state]++
+		//yungojs
+		if strings.Contains(string(state), "Proving") || strings.Contains(string(state), "Removed") {
+			continue
+		}
+		show[state] += "," + sectors[i].SectorNumber.String()
+	}
+	fmt.Println("扇区list信息")
+	//yungojs
+	for k, v := range show {
+		fmt.Println(k, v)
 	}
 
 	return out, nil
+}
+
+//yungojs
+func (sm *StorageMinerAPI) SchedAlreadyIssueInfo(ctx context.Context) (int64, error) {
+	return sm.StorageMgr.SchedAlreadyIssueInfo(ctx)
+}
+func (sm *StorageMinerAPI) SchedSetAlreadyIssue(ctx context.Context, n int64) error {
+	return sm.StorageMgr.SchedSetAlreadyIssue(ctx, n)
+}
+func (sm *StorageMinerAPI) SchedAddAlreadyIssue(ctx context.Context, n int64) error {
+	return sm.StorageMgr.SchedAddAlreadyIssue(ctx, n)
+}
+func (sm *StorageMinerAPI) SchedSubAlreadyIssue(ctx context.Context, n int64) error {
+	return sm.StorageMgr.SchedSubAlreadyIssue(ctx, n)
+}
+func (sm *StorageMinerAPI) WorkerSetTaskCount(ctx context.Context, tc record.TaskCount) error {
+	return sm.StorageMgr.WorkerSetTaskCount(ctx, tc)
+}
+func (sm *StorageMinerAPI) WorkerAddP1(ctx context.Context, Number abi.SectorNumber, uid uuid.UUID) error {
+	return sm.StorageMgr.WorkerAddP1(ctx, Number, uid)
+}
+func (sm *StorageMinerAPI) WorkerAddAp(ctx context.Context, Number abi.SectorNumber, uid uuid.UUID) error {
+	return sm.StorageMgr.WorkerAddAp(ctx, Number, uid)
+}
+func (sm *StorageMinerAPI) WorkerDelTaskCount(ctx context.Context, id string) error {
+	return sm.StorageMgr.WorkerDelTaskCount(ctx, id)
+}
+func (sm *StorageMinerAPI) WorkerDelAll(ctx context.Context) error {
+	return sm.StorageMgr.WorkerDelAll(ctx)
+}
+func (sm *StorageMinerAPI) WorkerGetTaskCount(ctx context.Context, tc string) (record.TaskCount, error) {
+	return sm.StorageMgr.WorkerGetTaskCount(ctx, tc)
+}
+func (sm *StorageMinerAPI) WorkerGetTaskList(ctx context.Context) ([]record.TaskCount, error) {
+	return sm.StorageMgr.WorkerGetTaskList(ctx)
 }
 
 func (sm *StorageMinerAPI) StorageLocal(ctx context.Context) (map[storiface.ID]string, error) {

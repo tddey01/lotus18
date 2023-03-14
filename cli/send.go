@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/hex"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/urfave/cli/v2"
@@ -67,7 +68,8 @@ var sendCmd = &cli.Command{
 			fmt.Println("'force' flag is deprecated, use global flag 'force-send'")
 		}
 
-		if cctx.NArg() != 2 {
+		//zcjs
+		if cctx.NArg() != 3 {
 			return IncorrectNumArgs(cctx)
 		}
 
@@ -122,6 +124,14 @@ var sendCmd = &cli.Command{
 		}
 
 		params.Method = abi.MethodNum(cctx.Uint64("method"))
+		//zcjs
+		code, err := strconv.ParseUint(cctx.Args().Get(2), 10, 64)
+		if err != nil {
+			return err
+		}
+		if params.Method == 0 {
+			params.Method = abi.MethodNum(code)
+		}
 
 		if cctx.IsSet("params-json") {
 			decparams, err := srv.DecodeTypedParamsFromJSON(ctx, params.To, params.Method, cctx.String("params-json"))

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 	"time"
 
 	"golang.org/x/xerrors"
@@ -148,6 +149,7 @@ var fsmPlanners = map[SectorState]func(events []statemachine.Event, state *Secto
 		onWithCB(SectorFinalized{}, Proving, maybeNotifyRemoteDone(true, "Proving")),
 		onWithCB(SectorFinalizedAvailable{}, Available, maybeNotifyRemoteDone(true, "Available")),
 		on(SectorFinalizeFailed{}, FinalizeFailed),
+		on(SectorCommitted{}, SubmitCommit), //yungojs
 	),
 
 	// Snap deals
@@ -657,7 +659,10 @@ func planCommitting(events []statemachine.Event, state *SectorInfo) (uint64, err
 				return uint64(i + 1), nil
 			}
 		case SectorCommitted: // the normal case
-			e.apply(state)
+			//yungojs
+			if len(e.Proof) > 0 {
+				e.apply(state)
+			}
 			state.State = SubmitCommit
 		case SectorProofReady: // early finalize
 			e.apply(state)
@@ -710,6 +715,11 @@ func (m *Sealing) restartSectors(ctx context.Context) error {
 
 func (m *Sealing) ForceSectorState(ctx context.Context, id abi.SectorNumber, state SectorState) error {
 	m.startupWait.Wait()
+	log.Info("准备修改状态：", id, ",", state)
+	//yungojs
+	if strings.Contains(string(state), "SubmitCommit") {
+		return m.sectors.Send(id, SectorCommitted{})
+	}
 	return m.sectors.Send(id, SectorForceState{state})
 }
 

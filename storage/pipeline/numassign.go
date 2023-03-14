@@ -50,11 +50,12 @@ func (m *Sealing) saveBitField(ctx context.Context, name datastore.Key, bf bitfi
 	return m.ds.Put(ctx, name, bb.Bytes())
 }
 
-func (m *Sealing) NextSectorNumber(ctx context.Context) (abi.SectorNumber, error) {
+func (m *Sealing) NextSectorNumber(ctx context.Context, cur uint64) (abi.SectorNumber, error) {
 	m.sclk.Lock()
 	defer m.sclk.Unlock()
 
-	am, err := m.numAssignerMetaLocked(ctx)
+	//yungojs
+	am, err := m.numAssignerMetaLocked(ctx, cur)
 	if err != nil {
 		return 0, err
 	}
@@ -83,11 +84,11 @@ func (m *Sealing) NextSectorNumber(ctx context.Context) (abi.SectorNumber, error
 func (m *Sealing) NumAssignerMeta(ctx context.Context) (api.NumAssignerMeta, error) {
 	m.sclk.Lock()
 	defer m.sclk.Unlock()
-
-	return m.numAssignerMetaLocked(ctx)
+	//yungojs
+	return m.numAssignerMetaLocked(ctx, 0)
 }
 
-func (m *Sealing) numAssignerMetaLocked(ctx context.Context) (api.NumAssignerMeta, error) {
+func (m *Sealing) numAssignerMetaLocked(ctx context.Context, setcur uint64) (api.NumAssignerMeta, error) {
 	// load user-reserved and allocated bitfields
 	reserved, err := m.loadBitField(ctx, reservedSectorsKey)
 	if err != nil {
@@ -102,13 +103,18 @@ func (m *Sealing) numAssignerMetaLocked(ctx context.Context) (api.NumAssignerMet
 	if allocated == nil {
 		var i uint64
 		{
-			curBytes, err := m.ds.Get(ctx, datastore.NewKey(StorageCounterDSPrefix))
-			if err != nil && err != datastore.ErrNotFound {
-				return api.NumAssignerMeta{}, err
-			}
-			if err == nil {
-				cur, _ := binary.Uvarint(curBytes)
-				i = cur + 1
+			//yungojs
+			if setcur != 0 {
+				i = setcur
+			} else {
+				curBytes, err := m.ds.Get(ctx, datastore.NewKey(StorageCounterDSPrefix))
+				if err != nil && err != datastore.ErrNotFound {
+					return api.NumAssignerMeta{}, err
+				}
+				if err == nil {
+					cur, _ := binary.Uvarint(curBytes)
+					i = cur + 1
+				}
 			}
 		}
 
@@ -237,8 +243,8 @@ func (m *Sealing) numReserveLocked(ctx context.Context, name string, reserving b
 	}
 
 	// load the global reserved bitfield and subtract current reservation if we're overwriting
-
-	nm, err := m.numAssignerMetaLocked(ctx)
+	//yungojs
+	nm, err := m.numAssignerMetaLocked(ctx, 0)
 	if err != nil {
 		return err
 	}
@@ -304,7 +310,8 @@ func (m *Sealing) NumReserveCount(ctx context.Context, name string, count uint64
 	m.sclk.Lock()
 	defer m.sclk.Unlock()
 
-	nm, err := m.numAssignerMetaLocked(ctx)
+	//yungojs
+	nm, err := m.numAssignerMetaLocked(ctx, 0)
 	if err != nil {
 		return bitfield.BitField{}, err
 	}

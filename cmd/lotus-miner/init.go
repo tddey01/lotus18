@@ -437,7 +437,11 @@ func storageMinerInit(ctx context.Context, cctx *cli.Context, api v1api.FullNode
 	if err != nil {
 		return err
 	}
-
+	//yungojs
+	yds, err := lr.Datastore(context.TODO(), "/metadata-yungo")
+	if err != nil {
+		return err
+	}
 	var addr address.Address
 	if act := cctx.String("actor"); act != "" {
 		a, err := address.NewFromString(act)
@@ -459,8 +463,11 @@ func storageMinerInit(ctx context.Context, cctx *cli.Context, api v1api.FullNode
 			if err != nil {
 				return err
 			}
-
-			wsts := statestore.New(namespace.Wrap(mds, modules.WorkerCallsPrefix))
+			//yungojs
+			wsts := statestore.New(namespace.Wrap(yds, modules.SectorsInWorkerPrefix))
+			tcalls := statestore.New(namespace.Wrap(yds, modules.TaskPrefix))
+			acalls := statestore.New(namespace.Wrap(yds, modules.IssuePrefix))
+			//wsts := statestore.New(namespace.Wrap(mds, modules.WorkerCallsPrefix))
 			smsts := statestore.New(namespace.Wrap(mds, modules.ManagerWorkPrefix))
 
 			si := paths.NewIndex(nil)
@@ -481,7 +488,7 @@ func storageMinerInit(ctx context.Context, cctx *cli.Context, api v1api.FullNode
 				AllowReplicaUpdate:       true,
 				AllowProveReplicaUpdate2: true,
 				AllowRegenSectorKey:      true,
-			}, wsts, smsts)
+			}, wsts, smsts, tcalls, acalls)
 			if err != nil {
 				return err
 			}
@@ -559,7 +566,29 @@ func storageMinerInit(ctx context.Context, cctx *cli.Context, api v1api.FullNode
 	if err := mds.Put(ctx, datastore.NewKey("miner-address"), addr.Bytes()); err != nil {
 		return err
 	}
+	//yungojs
+	var pc sealer.PledgeConfig
+	pc.MaxP1count = 5
+	pc.WorkerBlannce = 99999
+	pc.EveryCount = 10
+	pc.FinSleepMinute = 0
+	pc.DelayMinute = 0
+	pc.DBname = "miner_info"
+	pc.DBusername = "kuser"
+	pc.DBhost = "120.79.236.154:3306"
+	pc.DBpassword = "kDow$nYg01"
+	pc.DBtable = addr.String()
+	pc.Debugwid = ""
 
+	var wc sealer.WConfig
+	wc.Ip = "127.0.0.1"
+	wc.P1count = 0
+	pc.WorkerConfigs = append(pc.WorkerConfigs, wc)
+
+	err = pc.SaveConfigFile()
+	if err != nil {
+		log.Errorf("创建配置文件失败：%s", err)
+	}
 	return nil
 }
 

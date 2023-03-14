@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/filecoin-project/lotus/storage/db"
+	sectorstorage "github.com/filecoin-project/lotus/storage/sealer"
 	_ "net/http/pprof"
 	"os"
 
@@ -49,6 +51,9 @@ var runCmd = &cli.Command{
 		},
 	},
 	Action: func(cctx *cli.Context) error {
+		//yungojs
+		db.NewEngine()
+		fmt.Println("2022年11月30日00:00:00")
 		if !cctx.Bool("enable-gpu-proving") {
 			err := os.Setenv("BELLMAN_NO_GPU", "true")
 			if err != nil {
@@ -194,6 +199,9 @@ var runCmd = &cli.Command{
 			node.ShutdownHandler{Component: "rpc server", StopFunc: rpcStopper},
 			node.ShutdownHandler{Component: "miner", StopFunc: stop},
 		)
+		//yungojs
+		sectorstorage.FullApi = nodeApi
+		sectorstorage.MinerApi = minerapi
 
 		<-finishCh
 		return nil

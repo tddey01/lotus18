@@ -1,6 +1,8 @@
 package storiface
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/filecoin-project/go-state-types/abi"
@@ -86,6 +88,23 @@ type StorageInfo struct {
 	// - "update-cache"
 	// Any other value will generate a warning and be ignored.
 	DenyTypes []string
+
+	LocalPath string //yungojs		//这里不是无法获取到local，所以要赋值
+}
+
+//yungojs
+func (s *StorageInfo) SectorPath(sid abi.SectorID, fileType SectorFileType) string {
+	return filepath.Join(s.LocalPath, fileType.String(), SectorName(sid))
+}
+func (s *StorageInfo) PathExists() bool {
+	_, err := os.Stat(s.LocalPath)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		return false
+	}
+	return false
 }
 
 type HealthReport struct {

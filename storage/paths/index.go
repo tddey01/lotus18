@@ -3,20 +3,20 @@ package paths
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/url"
 	gopath "path"
-	"sort"
 	"sync"
 	"time"
+	//yungojs
+	"github.com/filecoin-project/go-state-types/big"
+	"github.com/google/uuid"
+	"sort"
 
 	"go.opencensus.io/stats"
 	"go.opencensus.io/tag"
 	"golang.org/x/xerrors"
 
 	"github.com/filecoin-project/go-state-types/abi"
-	"github.com/filecoin-project/go-state-types/big"
-
 	"github.com/filecoin-project/lotus/journal/alerting"
 	"github.com/filecoin-project/lotus/metrics"
 	"github.com/filecoin-project/lotus/storage/sealer/fsutil"
@@ -25,10 +25,16 @@ import (
 
 var HeartbeatInterval = 10 * time.Second
 var SkippedHeartbeatThresh = HeartbeatInterval * 5
+var storageTime = time.Minute * 5 //yungojs
 
 //go:generate go run github.com/golang/mock/mockgen -destination=mocks/index.go -package=mocks . SectorIndex
 
 type SectorIndex interface { // part of storage-miner api
+	//yungojs
+	StorageSetWeight(ctx context.Context, storageID storiface.ID) error
+	StorageLockByID(ctx context.Context, storageID storiface.ID, uid uuid.UUID) (int, error)
+	StorageUnLockByID(ctx context.Context, storageID storiface.ID, uid uuid.UUID) error
+
 	StorageAttach(context.Context, storiface.StorageInfo, fsutil.FsStat) error
 	StorageDetach(ctx context.Context, id storiface.ID, url string) error
 	StorageInfo(context.Context, storiface.ID) (storiface.StorageInfo, error)
@@ -59,6 +65,14 @@ type storageEntry struct {
 
 	lastHeartbeat time.Time
 	heartbeatErr  error
+
+	rw []storageQueue //yungojs
+}
+
+//yungojs
+type storageQueue struct {
+	uid         uuid.UUID
+	requestTime time.Time
 }
 
 type Index struct {
@@ -178,7 +192,7 @@ func (i *Index) StorageAttach(ctx context.Context, si storiface.StorageInfo, st 
 	i.lk.Lock()
 	defer i.lk.Unlock()
 
-	log.Infof("New sector storage: %s", si.ID)
+	//log.Infof("New sector storage: %s", si.ID)	//yungojs
 
 	if _, ok := i.stores[si.ID]; ok {
 		for _, u := range si.URLs {
@@ -197,6 +211,7 @@ func (i *Index) StorageAttach(ctx context.Context, si storiface.StorageInfo, st 
 
 			i.stores[si.ID].info.URLs = append(i.stores[si.ID].info.URLs, u)
 		}
+		i.stores[si.ID].info.LocalPath = si.LocalPath //yungojs
 
 		i.stores[si.ID].info.Weight = si.Weight
 		i.stores[si.ID].info.MaxStorage = si.MaxStorage
@@ -362,7 +377,7 @@ loop:
 				if !sid.primary && primary {
 					sid.primary = true
 				} else {
-					log.Warnf("sector %v redeclared in %s", s, storageID)
+					//log.Warnf("sector %v redeclared in %s", s, storageID) //yungojs
 				}
 				continue loop
 			}
@@ -475,7 +490,8 @@ func (i *Index) StorageFindSector(ctx context.Context, s abi.SectorID, ft storif
 			DenyTypes:  st.info.DenyTypes,
 		})
 	}
-
+	//yungojs
+	return out, nil
 	if allowFetch {
 		spaceReq, err := ft.SealSpaceUse(ssize)
 		if err != nil {
@@ -577,19 +593,19 @@ func (i *Index) StorageBestAlloc(ctx context.Context, allocate storiface.SectorF
 
 	var candidates []storageEntry
 
-	var err error
-	var spaceReq uint64
-	switch pathType {
-	case storiface.PathSealing:
-		spaceReq, err = allocate.SealSpaceUse(ssize)
-	case storiface.PathStorage:
-		spaceReq, err = allocate.StoreSpaceUse(ssize)
-	default:
-		panic(fmt.Sprintf("unexpected pathType: %s", pathType))
-	}
-	if err != nil {
-		return nil, xerrors.Errorf("estimating required space: %w", err)
-	}
+	//var err error
+	//var spaceReq uint64
+	//switch pathType {
+	//case storiface.PathSealing:
+	//	spaceReq, err = allocate.SealSpaceUse(ssize)
+	//case storiface.PathStorage:
+	//	spaceReq, err = allocate.StoreSpaceUse(ssize)
+	//default:
+	//	panic(fmt.Sprintf("unexpected pathType: %s", pathType))
+	//}
+	//if err != nil {
+	//	return nil, xerrors.Errorf("estimating required space: %w", err)
+	//}
 
 	for _, p := range i.stores {
 		if (pathType == storiface.PathSealing) && !p.info.CanSeal {
@@ -598,16 +614,20 @@ func (i *Index) StorageBestAlloc(ctx context.Context, allocate storiface.SectorF
 		if (pathType == storiface.PathStorage) && !p.info.CanStore {
 			continue
 		}
-
-		if spaceReq > uint64(p.fsi.Available) {
-			log.Debugf("not allocating on %s, out of space (available: %d, need: %d)", p.info.ID, p.fsi.Available, spaceReq)
+		//yungojs  34359738368  //32G
+		if 207000000000 > uint64(p.fsi.Available) {
+			//log.Debugf("not allocating on %s, out of space (available: %d, need: %d)", p.info.ID, p.fsi.Available, spaceReq)
 			continue
 		}
+		//if spaceReq > uint64(p.fsi.Available) {
+		//	log.Debugf("not allocating on %s, out of space (available: %d, need: %d)", p.info.ID, p.fsi.Available, spaceReq)
+		//	continue
+		//}
 
-		if time.Since(p.lastHeartbeat) > SkippedHeartbeatThresh {
-			log.Debugf("not allocating on %s, didn't receive heartbeats for %s", p.info.ID, time.Since(p.lastHeartbeat))
-			continue
-		}
+		//if time.Since(p.lastHeartbeat) > SkippedHeartbeatThresh {
+		//	log.Debugf("not allocating on %s, didn't receive heartbeats for %s", p.info.ID, time.Since(p.lastHeartbeat))
+		//	continue
+		//}
 
 		if p.heartbeatErr != nil {
 			log.Debugf("not allocating on %s, heartbeat error: %s", p.info.ID, p.heartbeatErr)
@@ -621,11 +641,18 @@ func (i *Index) StorageBestAlloc(ctx context.Context, allocate storiface.SectorF
 		return nil, xerrors.New("no good path found")
 	}
 
-	sort.Slice(candidates, func(i, j int) bool {
-		iw := big.Mul(big.NewInt(candidates[i].fsi.Available), big.NewInt(int64(candidates[i].info.Weight)))
-		jw := big.Mul(big.NewInt(candidates[j].fsi.Available), big.NewInt(int64(candidates[j].info.Weight)))
+	//sort.Slice(candidates, func(i, j int) bool {
+	//	iw := big.Mul(big.NewInt(candidates[i].fsi.Available), big.NewInt(int64(candidates[i].info.Weight)))
+	//	jw := big.Mul(big.NewInt(candidates[j].fsi.Available), big.NewInt(int64(candidates[j].info.Weight)))
+	//
+	//	return iw.GreaterThan(jw)
+	//})
+	//yungojs
+	sort.Slice(candidates, func(ii, j int) bool {
 
-		return iw.GreaterThan(jw)
+		iw := big.NewInt(int64(candidates[ii].info.Weight))
+		jw := big.NewInt(int64(candidates[j].info.Weight))
+		return iw.Int.Cmp(jw.Int) < 0
 	})
 
 	out := make([]storiface.StorageInfo, len(candidates))
@@ -653,6 +680,63 @@ func (i *Index) FindSector(id abi.SectorID, typ storiface.SectorFileType) ([]sto
 	}
 
 	return out, nil
+}
+
+//yungojs
+func (i *Index) StorageSetWeight(ctx context.Context, storageID storiface.ID) error {
+	if _, ok := i.stores[storageID]; ok {
+		i.stores[storageID].info.Weight += 1
+		return nil
+	}
+	return errors.New("修改权重存储ID:" + string(storageID) + "不存在！")
+}
+func (i *Index) StorageLockByID(ctx context.Context, storageID storiface.ID, uid uuid.UUID) (int, error) {
+	i.lk.Lock()
+	defer i.lk.Unlock()
+	num := 0
+	if _, ok := i.stores[storageID]; ok {
+		var rws []storageQueue
+		for _, v := range i.stores[storageID].rw {
+			if time.Since(v.requestTime) < storageTime {
+				rws = append(rws, v)
+			}
+		}
+		for in, v := range rws {
+			if v.uid == uid {
+				//更新请求时间，代表活跃
+				rws[in].requestTime = time.Now()
+				i.stores[storageID].rw = rws
+				return num, nil
+			}
+			num++
+		}
+		var st storageQueue
+		st.requestTime = time.Now()
+		st.uid = uid
+		//首次排队
+		rws = append(rws, st)
+		i.stores[storageID].rw = rws
+		return num, nil
+	}
+	return num, errors.New("获取锁 存储ID:" + string(storageID) + "不存在！")
+}
+func (i *Index) StorageUnLockByID(ctx context.Context, storageID storiface.ID, uid uuid.UUID) error {
+	i.lk.Lock()
+	defer i.lk.Unlock()
+	if _, ok := i.stores[storageID]; ok {
+		for in, v := range i.stores[storageID].rw {
+			if v.uid == uid {
+				if in < len(i.stores[storageID].rw)-1 {
+					i.stores[storageID].rw = append(i.stores[storageID].rw[:in], i.stores[storageID].rw[in+1:]...)
+				} else {
+					i.stores[storageID].rw = i.stores[storageID].rw[:in]
+				}
+				return nil
+			}
+		}
+		return nil
+	}
+	return errors.New("释放锁 存储ID:" + string(storageID) + "不存在！")
 }
 
 var _ SectorIndex = &Index{}

@@ -7,15 +7,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/google/uuid"
-	blocks "github.com/ipfs/go-block-format"
-	"github.com/ipfs/go-cid"
-	"github.com/libp2p/go-libp2p/core/metrics"
-	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/protocol"
-	"golang.org/x/xerrors"
-
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-bitfield"
 	datatransfer "github.com/filecoin-project/go-data-transfer"
@@ -31,11 +22,11 @@ import (
 	"github.com/filecoin-project/go-state-types/dline"
 	abinetwork "github.com/filecoin-project/go-state-types/network"
 	"github.com/filecoin-project/go-state-types/proof"
-
 	apitypes "github.com/filecoin-project/lotus/api/types"
 	"github.com/filecoin-project/lotus/chain/actors/builtin"
 	lminer "github.com/filecoin-project/lotus/chain/actors/builtin/miner"
 	"github.com/filecoin-project/lotus/chain/types"
+	record "github.com/filecoin-project/lotus/extern/record-task"
 	"github.com/filecoin-project/lotus/journal/alerting"
 	"github.com/filecoin-project/lotus/node/modules/dtypes"
 	"github.com/filecoin-project/lotus/node/repo/imports"
@@ -43,6 +34,14 @@ import (
 	"github.com/filecoin-project/lotus/storage/sealer/fsutil"
 	"github.com/filecoin-project/lotus/storage/sealer/sealtasks"
 	"github.com/filecoin-project/lotus/storage/sealer/storiface"
+	"github.com/google/uuid"
+	blocks "github.com/ipfs/go-block-format"
+	"github.com/ipfs/go-cid"
+	"github.com/libp2p/go-libp2p/core/metrics"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
+	"golang.org/x/xerrors"
 )
 
 var ErrNotSupported = xerrors.New("method not supported")
@@ -781,7 +780,7 @@ type StorageMinerStruct struct {
 
 		PiecesListPieces func(p0 context.Context) ([]cid.Cid, error) `perm:"read"`
 
-		PledgeSector func(p0 context.Context) (abi.SectorID, error) `perm:"write"`
+		PledgeSector func(p0 context.Context, p1 uint64) (abi.SectorID, error) `perm:"write"`
 
 		RecoverFault func(p0 context.Context, p1 []abi.SectorNumber) ([]cid.Cid, error) `perm:"admin"`
 
@@ -822,6 +821,14 @@ type StorageMinerStruct struct {
 		ReturnUnsealPiece func(p0 context.Context, p1 storiface.CallID, p2 *storiface.CallError) error `perm:"admin"`
 
 		RuntimeSubsystems func(p0 context.Context) (MinerSubsystems, error) `perm:"read"`
+
+		SchedAddAlreadyIssue func(p0 context.Context, p1 int64) error `perm:"admin"`
+
+		SchedAlreadyIssueInfo func(p0 context.Context) (int64, error) `perm:"admin"`
+
+		SchedSetAlreadyIssue func(p0 context.Context, p1 int64) error `perm:"admin"`
+
+		SchedSubAlreadyIssue func(p0 context.Context, p1 int64) error `perm:"admin"`
 
 		SealingAbort func(p0 context.Context, p1 storiface.CallID) error `perm:"admin"`
 
@@ -917,17 +924,37 @@ type StorageMinerStruct struct {
 
 		StorageLock func(p0 context.Context, p1 abi.SectorID, p2 storiface.SectorFileType, p3 storiface.SectorFileType) error `perm:"admin"`
 
+		StorageLockByID func(p0 context.Context, p1 storiface.ID, p2 uuid.UUID) (int, error) `perm:"admin"`
+
 		StorageRedeclareLocal func(p0 context.Context, p1 *storiface.ID, p2 bool) error `perm:"admin"`
 
 		StorageReportHealth func(p0 context.Context, p1 storiface.ID, p2 storiface.HealthReport) error `perm:"admin"`
+
+		StorageSetWeight func(p0 context.Context, p1 storiface.ID) error `perm:"admin"`
 
 		StorageStat func(p0 context.Context, p1 storiface.ID) (fsutil.FsStat, error) `perm:"admin"`
 
 		StorageTryLock func(p0 context.Context, p1 abi.SectorID, p2 storiface.SectorFileType, p3 storiface.SectorFileType) (bool, error) `perm:"admin"`
 
+		StorageUnLockByID func(p0 context.Context, p1 storiface.ID, p2 uuid.UUID) error `perm:"admin"`
+
+		WorkerAddAp func(p0 context.Context, p1 abi.SectorNumber, p2 uuid.UUID) error `perm:"admin"`
+
+		WorkerAddP1 func(p0 context.Context, p1 abi.SectorNumber, p2 uuid.UUID) error `perm:"admin"`
+
 		WorkerConnect func(p0 context.Context, p1 string) error `perm:"admin"`
 
+		WorkerDelAll func(p0 context.Context) error `perm:"admin"`
+
+		WorkerDelTaskCount func(p0 context.Context, p1 string) error `perm:"admin"`
+
+		WorkerGetTaskCount func(p0 context.Context, p1 string) (record.TaskCount, error) `perm:"admin"`
+
+		WorkerGetTaskList func(p0 context.Context) ([]record.TaskCount, error) `perm:"admin"`
+
 		WorkerJobs func(p0 context.Context) (map[uuid.UUID][]storiface.WorkerJob, error) `perm:"admin"`
+
+		WorkerSetTaskCount func(p0 context.Context, p1 record.TaskCount) error `perm:"admin"`
 
 		WorkerStats func(p0 context.Context) (map[uuid.UUID]storiface.WorkerStats, error) `perm:"admin"`
 	}
@@ -4693,14 +4720,14 @@ func (s *StorageMinerStub) PiecesListPieces(p0 context.Context) ([]cid.Cid, erro
 	return *new([]cid.Cid), ErrNotSupported
 }
 
-func (s *StorageMinerStruct) PledgeSector(p0 context.Context) (abi.SectorID, error) {
+func (s *StorageMinerStruct) PledgeSector(p0 context.Context, p1 uint64) (abi.SectorID, error) {
 	if s.Internal.PledgeSector == nil {
 		return *new(abi.SectorID), ErrNotSupported
 	}
-	return s.Internal.PledgeSector(p0)
+	return s.Internal.PledgeSector(p0, p1)
 }
 
-func (s *StorageMinerStub) PledgeSector(p0 context.Context) (abi.SectorID, error) {
+func (s *StorageMinerStub) PledgeSector(p0 context.Context, p1 uint64) (abi.SectorID, error) {
 	return *new(abi.SectorID), ErrNotSupported
 }
 
@@ -4922,6 +4949,50 @@ func (s *StorageMinerStruct) RuntimeSubsystems(p0 context.Context) (MinerSubsyst
 
 func (s *StorageMinerStub) RuntimeSubsystems(p0 context.Context) (MinerSubsystems, error) {
 	return *new(MinerSubsystems), ErrNotSupported
+}
+
+func (s *StorageMinerStruct) SchedAddAlreadyIssue(p0 context.Context, p1 int64) error {
+	if s.Internal.SchedAddAlreadyIssue == nil {
+		return ErrNotSupported
+	}
+	return s.Internal.SchedAddAlreadyIssue(p0, p1)
+}
+
+func (s *StorageMinerStub) SchedAddAlreadyIssue(p0 context.Context, p1 int64) error {
+	return ErrNotSupported
+}
+
+func (s *StorageMinerStruct) SchedAlreadyIssueInfo(p0 context.Context) (int64, error) {
+	if s.Internal.SchedAlreadyIssueInfo == nil {
+		return 0, ErrNotSupported
+	}
+	return s.Internal.SchedAlreadyIssueInfo(p0)
+}
+
+func (s *StorageMinerStub) SchedAlreadyIssueInfo(p0 context.Context) (int64, error) {
+	return 0, ErrNotSupported
+}
+
+func (s *StorageMinerStruct) SchedSetAlreadyIssue(p0 context.Context, p1 int64) error {
+	if s.Internal.SchedSetAlreadyIssue == nil {
+		return ErrNotSupported
+	}
+	return s.Internal.SchedSetAlreadyIssue(p0, p1)
+}
+
+func (s *StorageMinerStub) SchedSetAlreadyIssue(p0 context.Context, p1 int64) error {
+	return ErrNotSupported
+}
+
+func (s *StorageMinerStruct) SchedSubAlreadyIssue(p0 context.Context, p1 int64) error {
+	if s.Internal.SchedSubAlreadyIssue == nil {
+		return ErrNotSupported
+	}
+	return s.Internal.SchedSubAlreadyIssue(p0, p1)
+}
+
+func (s *StorageMinerStub) SchedSubAlreadyIssue(p0 context.Context, p1 int64) error {
+	return ErrNotSupported
 }
 
 func (s *StorageMinerStruct) SealingAbort(p0 context.Context, p1 storiface.CallID) error {
@@ -5441,6 +5512,17 @@ func (s *StorageMinerStub) StorageLock(p0 context.Context, p1 abi.SectorID, p2 s
 	return ErrNotSupported
 }
 
+func (s *StorageMinerStruct) StorageLockByID(p0 context.Context, p1 storiface.ID, p2 uuid.UUID) (int, error) {
+	if s.Internal.StorageLockByID == nil {
+		return 0, ErrNotSupported
+	}
+	return s.Internal.StorageLockByID(p0, p1, p2)
+}
+
+func (s *StorageMinerStub) StorageLockByID(p0 context.Context, p1 storiface.ID, p2 uuid.UUID) (int, error) {
+	return 0, ErrNotSupported
+}
+
 func (s *StorageMinerStruct) StorageRedeclareLocal(p0 context.Context, p1 *storiface.ID, p2 bool) error {
 	if s.Internal.StorageRedeclareLocal == nil {
 		return ErrNotSupported
@@ -5460,6 +5542,17 @@ func (s *StorageMinerStruct) StorageReportHealth(p0 context.Context, p1 storifac
 }
 
 func (s *StorageMinerStub) StorageReportHealth(p0 context.Context, p1 storiface.ID, p2 storiface.HealthReport) error {
+	return ErrNotSupported
+}
+
+func (s *StorageMinerStruct) StorageSetWeight(p0 context.Context, p1 storiface.ID) error {
+	if s.Internal.StorageSetWeight == nil {
+		return ErrNotSupported
+	}
+	return s.Internal.StorageSetWeight(p0, p1)
+}
+
+func (s *StorageMinerStub) StorageSetWeight(p0 context.Context, p1 storiface.ID) error {
 	return ErrNotSupported
 }
 
@@ -5485,6 +5578,39 @@ func (s *StorageMinerStub) StorageTryLock(p0 context.Context, p1 abi.SectorID, p
 	return false, ErrNotSupported
 }
 
+func (s *StorageMinerStruct) StorageUnLockByID(p0 context.Context, p1 storiface.ID, p2 uuid.UUID) error {
+	if s.Internal.StorageUnLockByID == nil {
+		return ErrNotSupported
+	}
+	return s.Internal.StorageUnLockByID(p0, p1, p2)
+}
+
+func (s *StorageMinerStub) StorageUnLockByID(p0 context.Context, p1 storiface.ID, p2 uuid.UUID) error {
+	return ErrNotSupported
+}
+
+func (s *StorageMinerStruct) WorkerAddAp(p0 context.Context, p1 abi.SectorNumber, p2 uuid.UUID) error {
+	if s.Internal.WorkerAddAp == nil {
+		return ErrNotSupported
+	}
+	return s.Internal.WorkerAddAp(p0, p1, p2)
+}
+
+func (s *StorageMinerStub) WorkerAddAp(p0 context.Context, p1 abi.SectorNumber, p2 uuid.UUID) error {
+	return ErrNotSupported
+}
+
+func (s *StorageMinerStruct) WorkerAddP1(p0 context.Context, p1 abi.SectorNumber, p2 uuid.UUID) error {
+	if s.Internal.WorkerAddP1 == nil {
+		return ErrNotSupported
+	}
+	return s.Internal.WorkerAddP1(p0, p1, p2)
+}
+
+func (s *StorageMinerStub) WorkerAddP1(p0 context.Context, p1 abi.SectorNumber, p2 uuid.UUID) error {
+	return ErrNotSupported
+}
+
 func (s *StorageMinerStruct) WorkerConnect(p0 context.Context, p1 string) error {
 	if s.Internal.WorkerConnect == nil {
 		return ErrNotSupported
@@ -5496,6 +5622,50 @@ func (s *StorageMinerStub) WorkerConnect(p0 context.Context, p1 string) error {
 	return ErrNotSupported
 }
 
+func (s *StorageMinerStruct) WorkerDelAll(p0 context.Context) error {
+	if s.Internal.WorkerDelAll == nil {
+		return ErrNotSupported
+	}
+	return s.Internal.WorkerDelAll(p0)
+}
+
+func (s *StorageMinerStub) WorkerDelAll(p0 context.Context) error {
+	return ErrNotSupported
+}
+
+func (s *StorageMinerStruct) WorkerDelTaskCount(p0 context.Context, p1 string) error {
+	if s.Internal.WorkerDelTaskCount == nil {
+		return ErrNotSupported
+	}
+	return s.Internal.WorkerDelTaskCount(p0, p1)
+}
+
+func (s *StorageMinerStub) WorkerDelTaskCount(p0 context.Context, p1 string) error {
+	return ErrNotSupported
+}
+
+func (s *StorageMinerStruct) WorkerGetTaskCount(p0 context.Context, p1 string) (record.TaskCount, error) {
+	if s.Internal.WorkerGetTaskCount == nil {
+		return *new(record.TaskCount), ErrNotSupported
+	}
+	return s.Internal.WorkerGetTaskCount(p0, p1)
+}
+
+func (s *StorageMinerStub) WorkerGetTaskCount(p0 context.Context, p1 string) (record.TaskCount, error) {
+	return *new(record.TaskCount), ErrNotSupported
+}
+
+func (s *StorageMinerStruct) WorkerGetTaskList(p0 context.Context) ([]record.TaskCount, error) {
+	if s.Internal.WorkerGetTaskList == nil {
+		return *new([]record.TaskCount), ErrNotSupported
+	}
+	return s.Internal.WorkerGetTaskList(p0)
+}
+
+func (s *StorageMinerStub) WorkerGetTaskList(p0 context.Context) ([]record.TaskCount, error) {
+	return *new([]record.TaskCount), ErrNotSupported
+}
+
 func (s *StorageMinerStruct) WorkerJobs(p0 context.Context) (map[uuid.UUID][]storiface.WorkerJob, error) {
 	if s.Internal.WorkerJobs == nil {
 		return *new(map[uuid.UUID][]storiface.WorkerJob), ErrNotSupported
@@ -5505,6 +5675,17 @@ func (s *StorageMinerStruct) WorkerJobs(p0 context.Context) (map[uuid.UUID][]sto
 
 func (s *StorageMinerStub) WorkerJobs(p0 context.Context) (map[uuid.UUID][]storiface.WorkerJob, error) {
 	return *new(map[uuid.UUID][]storiface.WorkerJob), ErrNotSupported
+}
+
+func (s *StorageMinerStruct) WorkerSetTaskCount(p0 context.Context, p1 record.TaskCount) error {
+	if s.Internal.WorkerSetTaskCount == nil {
+		return ErrNotSupported
+	}
+	return s.Internal.WorkerSetTaskCount(p0, p1)
+}
+
+func (s *StorageMinerStub) WorkerSetTaskCount(p0 context.Context, p1 record.TaskCount) error {
+	return ErrNotSupported
 }
 
 func (s *StorageMinerStruct) WorkerStats(p0 context.Context) (map[uuid.UUID]storiface.WorkerStats, error) {

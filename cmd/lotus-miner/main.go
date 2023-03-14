@@ -41,6 +41,10 @@ func main() {
 		stopCmd,
 		configCmd,
 		backupCmd,
+		// yungojs
+		schedCmd,
+		workerCmd,
+		exprotToMysqlCmd,
 		lcli.WithCategory("chain", actorCmd),
 		lcli.WithCategory("chain", infoCmd),
 		lcli.WithCategory("market", storageDealsCmd),

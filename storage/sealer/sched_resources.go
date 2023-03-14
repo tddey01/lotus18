@@ -96,35 +96,35 @@ func (a *ActiveResources) CanHandleRequest(tt sealtasks.SealTaskType, needRes st
 	}
 
 	res := info.Resources
-
+	//yungojs
 	// TODO: dedupe needRes.BaseMinMemory per task type (don't add if that task is already running)
-	memNeeded := needRes.MinMemory + needRes.BaseMinMemory
-	memUsed := a.memUsedMin
-	// assume that MemUsed can be swapped, so only check it in the vmem Check
-	memAvail := res.MemPhysical - memUsed
-	if memNeeded > memAvail {
-		log.Debugf("sched: not scheduling on worker %s for %s; not enough physical memory - need: %dM, have %dM available", wid, caller, memNeeded/mib, memAvail/mib)
-		return false
-	}
-
-	vmemNeeded := needRes.MaxMemory + needRes.BaseMinMemory
-	vmemUsed := a.memUsedMax
-	workerMemoryReserved := res.MemUsed + res.MemSwapUsed // memory used outside lotus-worker (used by the OS, etc.)
-
-	if vmemUsed < workerMemoryReserved {
-		vmemUsed = workerMemoryReserved
-	}
-	vmemAvail := (res.MemPhysical + res.MemSwap) - vmemUsed
-
-	if vmemNeeded > vmemAvail {
-		log.Debugf("sched: not scheduling on worker %s for %s; not enough virtual memory - need: %dM, have %dM available", wid, caller, vmemNeeded/mib, vmemAvail/mib)
-		return false
-	}
-
-	if a.cpuUse+needRes.Threads(res.CPUs, len(res.GPUs)) > res.CPUs {
-		log.Debugf("sched: not scheduling on worker %s for %s; not enough threads, need %d, %d in use, target %d", wid, caller, needRes.Threads(res.CPUs, len(res.GPUs)), a.cpuUse, res.CPUs)
-		return false
-	}
+	//memNeeded := needRes.MinMemory + needRes.BaseMinMemory
+	//memUsed := a.memUsedMin
+	//// assume that MemUsed can be swapped, so only check it in the vmem Check
+	//memAvail := res.MemPhysical - memUsed
+	//if memNeeded > memAvail {
+	//	log.Debugf("sched: not scheduling on worker %s for %s; not enough physical memory - need: %dM, have %dM available", wid, caller, memNeeded/mib, memAvail/mib)
+	//	return false
+	//}
+	//
+	//vmemNeeded := needRes.MaxMemory + needRes.BaseMinMemory
+	//vmemUsed := a.memUsedMax
+	//workerMemoryReserved := res.MemUsed + res.MemSwapUsed // memory used outside lotus-worker (used by the OS, etc.)
+	//
+	//if vmemUsed < workerMemoryReserved {
+	//	vmemUsed = workerMemoryReserved
+	//}
+	//vmemAvail := (res.MemPhysical + res.MemSwap) - vmemUsed
+	//
+	//if vmemNeeded > vmemAvail {
+	//	log.Debugf("sched: not scheduling on worker %s for %s; not enough virtual memory - need: %dM, have %dM available", wid, caller, vmemNeeded/mib, vmemAvail/mib)
+	//	return false
+	//}
+	//
+	//if a.cpuUse+needRes.Threads(res.CPUs, len(res.GPUs)) > res.CPUs {
+	//	log.Debugf("sched: not scheduling on worker %s for %s; not enough threads, need %d, %d in use, target %d", wid, caller, needRes.Threads(res.CPUs, len(res.GPUs)), a.cpuUse, res.CPUs)
+	//	return false
+	//}
 
 	if len(res.GPUs) > 0 && needRes.GPUUtilization > 0 {
 		if a.gpuUsed+needRes.GPUUtilization > float64(len(res.GPUs)) {
